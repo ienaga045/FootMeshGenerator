@@ -34,6 +34,7 @@ def calculate_foot_skeleton(params: FootParams) -> dict:
 
     length = params.foot_length
     width = params.foot_width
+    heel_scale = max(0.35, params.heel_size / 100.0)
     toe_base_y = length * 0.62
     ball_y = length * 0.50
     heel_y = -length * 0.42
@@ -41,11 +42,17 @@ def calculate_foot_skeleton(params: FootParams) -> dict:
 
     ankle_angle = math.radians(params.ankle_angle)
     ankle = np.array([0.0, ankle_y, params.instep_height + 18.0 + math.sin(ankle_angle) * 18.0])
-    heel = np.array([0.0, heel_y, params.heel_width * 0.08])
+    heel = np.array([0.0, heel_y, params.heel_width * 0.08 * heel_scale])
     instep = np.array([0.0, length * 0.05, params.instep_height])
     arch = np.array([_mirror_x(-width * 0.18, params), -length * 0.05, params.arch_height])
     big_ball = np.array([_mirror_x(-width * 0.36, params), ball_y, params.instep_height * 0.35])
     small_ball = np.array([_mirror_x(width * 0.40, params), ball_y * 0.98, params.instep_height * 0.28])
+    pivot = np.array([0.0, ball_y, params.instep_height * 0.20])
+
+    ankle = _pitch_for_tiptoe(ankle, pivot, params.ankle_pivot_angle)
+    heel = _pitch_for_tiptoe(heel, pivot, params.ankle_pivot_angle)
+    instep = _pitch_for_tiptoe(instep, pivot, params.ankle_pivot_angle)
+    arch = _pitch_for_tiptoe(arch, pivot, params.ankle_pivot_angle)
 
     base_xs = np.array([-0.37, -0.18, 0.0, 0.18, 0.36]) * width
     base_zs = np.array([0.31, 0.28, 0.26, 0.24, 0.22]) * params.instep_height
@@ -63,13 +70,16 @@ def calculate_foot_skeleton(params: FootParams) -> dict:
         lift = math.radians(params.toe_lift)
         total_len = toe_lengths[i]
 
-        seg1_len = total_len * 0.48
-        seg2_len = total_len * 0.32
-        seg3_len = total_len * 0.20
+        seg1_len = total_len * 0.44
+        seg2_len = total_len * 0.34
+        seg3_len = total_len * 0.22
 
-        dir1 = np.array([math.sin(lateral), math.cos(lateral), math.sin(lift)]) * seg1_len
-        dir2 = np.array([math.sin(lateral), math.cos(lateral + curl * 0.25), math.sin(lift - curl * 0.30)]) * seg2_len
-        dir3 = np.array([math.sin(lateral), math.cos(lateral + curl * 0.50), math.sin(lift - curl * 0.55)]) * seg3_len
+        curl_steps = [0.0, -curl * 0.78, -curl * 1.55]
+        lift_steps = [lift, lift + curl_steps[1], lift + curl_steps[2]]
+
+        dir1 = _toe_direction(lateral, lift_steps[0]) * seg1_len
+        dir2 = _toe_direction(lateral, lift_steps[1]) * seg2_len
+        dir3 = _toe_direction(lateral, lift_steps[2]) * seg3_len
 
         mid = base + dir1
         distal = mid + dir2
@@ -82,11 +92,14 @@ def calculate_foot_skeleton(params: FootParams) -> dict:
                 "distal": distal,
                 "tip": tip,
                 "length": total_len,
-                "radius": max(6.0, width * (0.085 if i == 0 else 0.065 - i * 0.004)),
+                "radius": max(6.0, width * (0.085 if i == 0 else 0.065 - i * 0.004)) * (params.toe_thickness / 100.0),
             }
         )
 
     outline = _calculate_outline(params, toe_base_y, heel_y)
+    outline = [_pitch_for_tiptoe(point, pivot, params.ankle_pivot_angle) if point[1] < ball_y else point for point in outline]
+    side_sole = _calculate_side_sole(params, heel_y, ball_y)
+    side_sole = [_pitch_for_tiptoe(point, pivot, params.ankle_pivot_angle) if point[1] < ball_y else point for point in side_sole]
     return {
         "points": {
             "ankle": ankle,
@@ -98,17 +111,53 @@ def calculate_foot_skeleton(params: FootParams) -> dict:
         },
         "toes": toes,
         "outline": outline,
+        "side_sole": side_sole,
         "toe_lengths": toe_lengths,
     }
+
+
+def _toe_direction(lateral_angle: float, pitch_angle: float) -> np.ndarray:
+    """Return a toe segment direction from top-view spread and side-view pitch."""
+
+    forward = math.cos(pitch_angle)
+    return np.array(
+        [
+            math.sin(lateral_angle) * forward,
+            math.cos(lateral_angle) * forward,
+            math.sin(pitch_angle),
+        ]
+    )
+
+
+def _pitch_for_tiptoe(point: np.ndarray, pivot: np.ndarray, angle_degrees: float) -> np.ndarray:
+    """Rotate rear-foot points around the ball area for tiptoe-like poses."""
+
+    if abs(angle_degrees) < 0.001:
+        return point
+    angle = math.radians(angle_degrees)
+    dy = point[1] - pivot[1]
+    dz = point[2] - pivot[2]
+    y = pivot[1] + dy * math.cos(angle) + dz * math.sin(angle)
+    z = pivot[2] - dy * math.sin(angle) + dz * math.cos(angle)
+    return np.array([point[0], y, z])
 
 
 def _calculate_outline(params: FootParams, toe_base_y: float, heel_y: float) -> list[np.ndarray]:
     width = params.foot_width
     length = params.foot_length
+    heel_scale = max(0.35, params.heel_size / 100.0)
     half = width * 0.5
+    heel_half = params.heel_width * 0.46 * heel_scale
+    heel_back_y = heel_y - params.heel_width * 0.22 * heel_scale
+    heel_arc = []
+    for i in range(7):
+        theta = math.pi - math.pi * i / 6.0
+        x = math.cos(theta) * heel_half
+        y = heel_y - math.sin(theta) * (heel_y - heel_back_y)
+        heel_arc.append((x, y))
+
     pts = [
-        (-params.heel_width * 0.46, heel_y),
-        (-half * 0.62, -length * 0.25),
+        (-half * 0.62 * (0.95 + heel_scale * 0.05), -length * 0.25),
         (-half * 0.82, length * 0.08),
         (-half * 0.70, length * 0.36),
         (-half * 0.48, toe_base_y),
@@ -117,7 +166,23 @@ def _calculate_outline(params: FootParams, toe_base_y: float, heel_y: float) -> 
         (half * 0.52, toe_base_y),
         (half * 0.76, length * 0.34),
         (half * 0.72, length * 0.04),
-        (half * 0.56, -length * 0.25),
-        (params.heel_width * 0.46, heel_y),
+        (half * 0.56 * (0.95 + heel_scale * 0.05), -length * 0.25),
+        *reversed(heel_arc),
     ]
     return [np.array([_mirror_x(x, params), y, 0.0]) for x, y in pts]
+
+
+def _calculate_side_sole(params: FootParams, heel_y: float, ball_y: float) -> list[np.ndarray]:
+    """Return a side-view sole guide that follows the shared tiptoe pivot."""
+
+    length = params.foot_length
+    heel_scale = max(0.35, params.heel_size / 100.0)
+    heel_back_y = heel_y - params.heel_width * 0.24 * heel_scale
+    toe_front_y = length * 0.70
+    return [
+        np.array([0.0, heel_back_y, 0.0]),
+        np.array([0.0, heel_y + length * 0.06, params.arch_height * 0.08]),
+        np.array([0.0, -length * 0.08, params.arch_height * 0.30]),
+        np.array([0.0, ball_y, 0.0]),
+        np.array([0.0, toe_front_y, 0.0]),
+    ]

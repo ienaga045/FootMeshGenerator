@@ -14,6 +14,16 @@ from presets import PRESETS, get_default_params
 
 PARAM_KEYS = list(SLIDER_SPECS.keys())
 PREVIEW_OPTIONS = {"上面プレビュー": "top", "側面プレビュー": "side", "両方表示": "both"}
+PREVIEW_COLUMN_WIDTH = 790
+CONTROL_COLUMN_WIDTH = 560
+WINDOW_SIZE = (1380, 760)
+SLIDER_GROUPS = [
+    ("基本形状", ["foot_length", "foot_width", "instep_height", "heel_width", "heel_size", "arch_height"]),
+    ("長さ", ["toe_length", "big_toe_length"]),
+    ("角度", ["toe_spread", "big_toe_angle", "ankle_angle", "ankle_pivot_angle"]),
+    ("反り・曲げ", ["toe_curl", "toe_lift"]),
+    ("出力形状", ["toe_thickness", "joint_sphere_scale", "malleolus_size", "instep_part_thickness"]),
+]
 
 
 def main() -> None:
@@ -24,12 +34,27 @@ def main() -> None:
 
     layout = [
         [
-            sg.Column([[sg.Image(data=_preview_bytes(skeleton, params), key="-PREVIEW-")]], pad=(8, 8)),
-            sg.Column(_controls_layout(params), vertical_alignment="top", scrollable=True, size=(430, 620), expand_y=True),
+            sg.Column(
+                [
+                    [sg.Image(data=_preview_bytes(skeleton, params), key="-PREVIEW-")],
+                    [sg.HorizontalSeparator()],
+                    *(_bottom_actions_layout()),
+                ],
+                pad=(8, 8),
+                size=(PREVIEW_COLUMN_WIDTH, 680),
+                vertical_alignment="top",
+            ),
+            sg.Column(
+                _slider_controls_layout(params),
+                vertical_alignment="top",
+                size=(CONTROL_COLUMN_WIDTH, 680),
+                pad=(4, 8),
+            ),
         ],
         [sg.Text("Ready", key="-STATUS-", size=(100, 1), text_color="#36556f")],
     ]
-    window = sg.Window("Foot Base Mesh Generator", layout, finalize=True, resizable=True)
+    window = sg.Window("Foot Base Mesh Generator", layout, finalize=True, resizable=True, size=WINDOW_SIZE)
+    _bring_window_to_front(window)
 
     while True:
         event, values = window.read(timeout=80)
@@ -56,16 +81,10 @@ def main() -> None:
                 skeleton = calculate_foot_skeleton(params)
                 mesh_cache = None
                 _update_preview(window, skeleton, params)
-            elif event == "-MAKE_MODEL-":
-                params = _params_from_values(values, params.toe_profile)
-                skeleton = calculate_foot_skeleton(params)
-                mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
-                window["-STATUS-"].update(f"モデル作成完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])}")
             elif event == "-EXPORT_OBJ-":
                 params = _params_from_values(values, params.toe_profile)
                 skeleton = calculate_foot_skeleton(params)
-                if mesh_cache is None:
-                    mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
+                mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
                 filepath = sg.popup_get_file(
                     "OBJ保存先を選択",
                     save_as=True,
@@ -74,8 +93,8 @@ def main() -> None:
                     default_path=str(Path.cwd() / "foot_base_mesh.obj"),
                 )
                 if filepath:
-                    export_obj(*mesh_cache, filepath)
-                    window["-STATUS-"].update(f"OBJ出力完了: {filepath}")
+                    export_obj(*mesh_cache, filepath, params=params)
+                    window["-STATUS-"].update(f"OBJ作成・保存完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])} / {filepath}")
         except Exception as exc:
             window["-STATUS-"].update(f"Error: {exc}")
             sg.popup_error("処理に失敗しました", str(exc))
@@ -83,7 +102,20 @@ def main() -> None:
     window.close()
 
 
-def _controls_layout(params: FootParams) -> list[list[sg.Element]]:
+def _bring_window_to_front(window: sg.Window) -> None:
+    """Nudge Tk to show the window in front when launched from a macOS app bundle."""
+
+    try:
+        root = window.TKroot
+        root.lift()
+        root.attributes("-topmost", True)
+        root.after(700, lambda: root.attributes("-topmost", False))
+        root.focus_force()
+    except Exception:
+        pass
+
+
+def _slider_controls_layout(params: FootParams) -> list[list[sg.Element]]:
     rows = [
         [sg.Text("足タイプ", font=("Helvetica", 13, "bold"))],
         [
@@ -103,33 +135,49 @@ def _controls_layout(params: FootParams) -> list[list[sg.Element]]:
         [sg.HorizontalSeparator()],
     ]
 
-    for key, (label, min_value, max_value, resolution) in SLIDER_SPECS.items():
-        rows.append([sg.Text(label, size=(14, 1)), sg.Text("", key=f"-VAL_{key}-", size=(6, 1))])
-        rows.append(
+    for group_title, keys in SLIDER_GROUPS:
+        rows.append([sg.Text(group_title, font=("Helvetica", 11, "bold"), pad=(5, (4, 0)))])
+        slider_cells = [_slider_cell(params, key) for key in keys]
+        for left, right in _pairs(slider_cells):
+            rows.append([left, right if right is not None else sg.Text("", size=(24, 1))])
+        rows.append([sg.HorizontalSeparator(pad=(5, 2))])
+
+    return rows
+
+
+def _slider_cell(params: FootParams, key: str) -> sg.Column:
+    label, min_value, max_value, resolution = SLIDER_SPECS[key]
+    return sg.Column(
+        [
+            [sg.Text(label, size=(12, 1), pad=(0, 0)), sg.Text("", key=f"-VAL_{key}-", size=(5, 1), justification="right", pad=(0, 0))],
             [
                 sg.Slider(
                     range=(min_value, max_value),
                     default_value=getattr(params, key),
                     resolution=resolution,
                     orientation="h",
-                    size=(32, 16),
+                    size=(19, 10),
                     key=key,
                     enable_events=True,
+                    pad=(0, 0),
                 )
-            ]
-        )
-
-    preset_buttons = [[sg.Button(name, size=(14, 1)) for name in row] for row in _chunks(list(PRESETS.keys()), 2)]
-    rows.extend(
-        [
-            [sg.HorizontalSeparator()],
-            [sg.Text("プリセット", font=("Helvetica", 13, "bold"))],
-            *preset_buttons,
-            [sg.HorizontalSeparator()],
-            [sg.Button("モデル作成", key="-MAKE_MODEL-", button_color=("white", "#2f6f9f")), sg.Button("OBJ出力", key="-EXPORT_OBJ-", button_color=("white", "#3d7f55")), sg.Button("リセット", key="-RESET-")],
-        ]
+            ],
+        ],
+        pad=(5, 1),
+        vertical_alignment="top",
     )
-    return rows
+
+
+def _bottom_actions_layout() -> list[list[sg.Element]]:
+    preset_rows = [[sg.Button(name, size=(12, 1), pad=(2, 1)) for name in row] for row in _chunks(list(PRESETS.keys()), 4)]
+    return [
+        [sg.Text("プリセット", font=("Helvetica", 12, "bold"), pad=(2, 2))],
+        *preset_rows,
+        [
+            sg.Button("OBJ作成・保存", key="-EXPORT_OBJ-", size=(16, 1), button_color=("white", "#3d7f55"), pad=(2, 3)),
+            sg.Button("リセット", key="-RESET-", size=(12, 1), pad=(2, 3)),
+        ],
+    ]
 
 
 def _preview_bytes(skeleton: dict, params: FootParams) -> bytes:
@@ -147,7 +195,6 @@ def _params_from_values(values: dict, toe_profile: str = "standard") -> FootPara
     preview_label = values.get("-PREVIEW_MODE-", "両方表示")
     side = "left" if values.get("-SIDE_LEFT-") else "right"
     data = {key: float(values[key]) for key in PARAM_KEYS}
-    data["mesh_resolution"] = int(data["mesh_resolution"])
     data["side"] = side
     data["preview_mode"] = PREVIEW_OPTIONS.get(preview_label, "both")
     data["toe_profile"] = toe_profile
@@ -173,6 +220,12 @@ def _apply_params_to_window(window: sg.Window, params: FootParams) -> None:
 def _chunks(items: list[str], size: int):
     for i in range(0, len(items), size):
         yield items[i : i + size]
+
+
+def _pairs(items: list[sg.Element]):
+    for i in range(0, len(items), 2):
+        right = items[i + 1] if i + 1 < len(items) else None
+        yield items[i], right
 
 
 if __name__ == "__main__":

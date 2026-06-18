@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 .DS_Store
 *.obj
+*.mtl
+.venv/
+foot_app_launch.log

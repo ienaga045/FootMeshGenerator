@@ -1,0 +1,16 @@
+#!/bin/bash
+
+APP_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$APP_ROOT" || exit 1
+LOG_FILE="$APP_ROOT/foot_app_launch.log"
+
+{
+echo "=== Foot Base Mesh Generator launch $(date) ==="
+echo "APP_ROOT=$APP_ROOT"
+echo "PWD=$(pwd)"
+echo "PATH=$PATH"
+echo "HOME=$HOME"
+echo "Opening Terminal command wrapper."
+} >> "$LOG_FILE" 2>&1
+
+exec /usr/bin/open "$APP_ROOT/FootBaseMeshGenerator.command"
