@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import PySimpleGUI as sg
@@ -17,6 +18,9 @@ PREVIEW_OPTIONS = {"上面プレビュー": "top", "側面プレビュー": "sid
 PREVIEW_COLUMN_WIDTH = 790
 CONTROL_COLUMN_WIDTH = 560
 WINDOW_SIZE = (1380, 760)
+APP_ROOT = Path(__file__).resolve().parent
+DEFAULT_OUTPUT_DIR = APP_ROOT / "output"
+OBJ_FILE_PREFIX = "foot_base_mesh"
 SLIDER_GROUPS = [
     ("基本形状", ["foot_length", "foot_width", "instep_height", "heel_width", "heel_size", "arch_height"]),
     ("長さ", ["toe_length", "big_toe_length"]),
@@ -31,6 +35,7 @@ def main() -> None:
     params = get_default_params()
     skeleton = calculate_foot_skeleton(params)
     mesh_cache = None
+    output_dir = _ensure_output_dir()
 
     layout = [
         [
@@ -38,7 +43,7 @@ def main() -> None:
                 [
                     [sg.Image(data=_preview_bytes(skeleton, params), key="-PREVIEW-")],
                     [sg.HorizontalSeparator()],
-                    *(_bottom_actions_layout()),
+                    *(_bottom_actions_layout(output_dir)),
                 ],
                 pad=(8, 8),
                 size=(PREVIEW_COLUMN_WIDTH, 680),
@@ -85,16 +90,10 @@ def main() -> None:
                 params = _params_from_values(values, params.toe_profile)
                 skeleton = calculate_foot_skeleton(params)
                 mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
-                filepath = sg.popup_get_file(
-                    "OBJ保存先を選択",
-                    save_as=True,
-                    default_extension=".obj",
-                    file_types=(("OBJ files", "*.obj"),),
-                    default_path=str(Path.cwd() / "foot_base_mesh.obj"),
-                )
-                if filepath:
-                    export_obj(*mesh_cache, filepath, params=params)
-                    window["-STATUS-"].update(f"OBJ作成・保存完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])} / {filepath}")
+                filepath = _next_output_path(output_dir)
+                export_obj(*mesh_cache, filepath, params=params)
+                window["-LAST_SAVE-"].update(f"前回保存: {filepath.name}")
+                window["-STATUS-"].update(f"OBJ作成・保存完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])} / {filepath}")
         except Exception as exc:
             window["-STATUS-"].update(f"Error: {exc}")
             sg.popup_error("処理に失敗しました", str(exc))
@@ -168,7 +167,7 @@ def _slider_cell(params: FootParams, key: str) -> sg.Column:
     )
 
 
-def _bottom_actions_layout() -> list[list[sg.Element]]:
+def _bottom_actions_layout(output_dir: Path) -> list[list[sg.Element]]:
     preset_rows = [[sg.Button(name, size=(12, 1), pad=(2, 1)) for name in row] for row in _chunks(list(PRESETS.keys()), 4)]
     return [
         [sg.Text("プリセット", font=("Helvetica", 12, "bold"), pad=(2, 2))],
@@ -177,6 +176,8 @@ def _bottom_actions_layout() -> list[list[sg.Element]]:
             sg.Button("OBJ作成・保存", key="-EXPORT_OBJ-", size=(16, 1), button_color=("white", "#3d7f55"), pad=(2, 3)),
             sg.Button("リセット", key="-RESET-", size=(12, 1), pad=(2, 3)),
         ],
+        [sg.Text(f"保存先: {output_dir}", key="-OUTPUT_DIR-", size=(100, 1), text_color="#36556f", pad=(2, (2, 0)))],
+        [sg.Text("前回保存: なし", key="-LAST_SAVE-", size=(100, 1), text_color="#36556f", pad=(2, 0))],
     ]
 
 
@@ -226,6 +227,27 @@ def _pairs(items: list[sg.Element]):
     for i in range(0, len(items), 2):
         right = items[i + 1] if i + 1 < len(items) else None
         yield items[i], right
+
+
+def _ensure_output_dir() -> Path:
+    """Create the app-local output directory used for automatic OBJ saves."""
+
+    DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    return DEFAULT_OUTPUT_DIR
+
+
+def _next_output_path(output_dir: Path) -> Path:
+    """Return a timestamped OBJ path without overwriting existing files."""
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = output_dir / f"{OBJ_FILE_PREFIX}_{timestamp}.obj"
+    if not path.exists():
+        return path
+    for index in range(1, 1000):
+        candidate = output_dir / f"{OBJ_FILE_PREFIX}_{timestamp}_{index:03d}.obj"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError("保存ファイル名を作成できませんでした")
 
 
 if __name__ == "__main__":
