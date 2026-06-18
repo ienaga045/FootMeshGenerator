@@ -83,11 +83,7 @@ PY
 
 OBJ出力時は内部mm相当値を `0.004` 倍して書き出します。参考にした手ベースメッシュOBJの約1単位スケールに近づけ、Nomad SculptやZBrush上で並べて扱いやすくするためです。
 
-Nomad SculptやZBrush側で一括SDivしやすいように、OBJは `foot_base_mesh` の単一オブジェクト/単一グループとして出力します。パーツの見分けはグループ分割ではなく、同時に出力するMTLのマテリアルで行います。
-
-- `soft_tissue`: 足本体、甲、かかと、足裏まわり。
-- `bone`: 骨・腱を意識するブロック状パーツ。
-- `joint_sphere`: 関節球、指先球、くるぶし球。
+Nomad SculptやZBrush側で一括SDivしやすいように、OBJは `foot_base_mesh` の単一オブジェクト/単一グループとして出力します。Nomad Sculptがマテリアル単位でオブジェクト分割することを避けるため、MTLや `usemtl` は書き出しません。
 
 足指は四角いブロックと球体ジョイントで生成します。円柱形状は使わず、付け根・中間関節・末節関節・指先へ球体を重ねます。SDiv、Dynamesh、Voxel Remesh後に節を残しやすい構成です。
 
