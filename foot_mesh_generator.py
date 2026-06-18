@@ -18,6 +18,7 @@ SDIV_BONE_THICKNESS_SCALE = 1.70
 SDIV_SOFT_THICKNESS_SCALE = 1.55
 SDIV_SPHERE_RADIUS_SCALE = 1.22
 SDIV_BOX_SIZE_SCALE = np.array([1.12, 1.12, 1.18])
+BOX_SEGMENT_MAX_FACE_SPAN = 28.0
 
 
 def generate_foot_mesh_from_skeleton(skeleton: dict, params: FootParams) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]], list[str]]:
@@ -150,7 +151,8 @@ def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootPa
         params.instep_height * 0.18,
         params.instep_height * 0.16,
     ]
-    x_samples = [-0.50, -0.25, 0.0, 0.25, 0.50]
+    centers, widths, top_offsets, bottom_offsets = _densify_skin_profile(centers, widths, top_offsets, bottom_offsets, steps=3)
+    x_samples = [-0.50, -0.375, -0.25, -0.125, 0.0, 0.125, 0.25, 0.375, 0.50]
 
     top_grid = []
     bottom_grid = []
@@ -187,6 +189,34 @@ def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootPa
         groups.append("foot_body")
         faces.append((top_grid[-1][c], top_grid[-1][c + 1], bottom_grid[-1][c + 1], bottom_grid[-1][c]))
         groups.append("foot_body")
+
+
+def _densify_skin_profile(
+    centers: list[np.ndarray],
+    widths: list[float],
+    top_offsets: list[float],
+    bottom_offsets: list[float],
+    steps: int,
+) -> tuple[list[np.ndarray], list[float], list[float], list[float]]:
+    """Insert support rows so the foot shell does not contain oversized SDiv faces."""
+
+    steps = max(1, int(steps))
+    dense_centers: list[np.ndarray] = []
+    dense_widths: list[float] = []
+    dense_top_offsets: list[float] = []
+    dense_bottom_offsets: list[float] = []
+    for i in range(len(centers) - 1):
+        for step in range(steps):
+            t = step / steps
+            dense_centers.append(centers[i] * (1.0 - t) + centers[i + 1] * t)
+            dense_widths.append(widths[i] * (1.0 - t) + widths[i + 1] * t)
+            dense_top_offsets.append(top_offsets[i] * (1.0 - t) + top_offsets[i + 1] * t)
+            dense_bottom_offsets.append(bottom_offsets[i] * (1.0 - t) + bottom_offsets[i + 1] * t)
+    dense_centers.append(centers[-1])
+    dense_widths.append(widths[-1])
+    dense_top_offsets.append(top_offsets[-1])
+    dense_bottom_offsets.append(bottom_offsets[-1])
+    return dense_centers, dense_widths, dense_top_offsets, dense_bottom_offsets
 
 
 def _skin_height_at(point: np.ndarray, params: FootParams) -> float:
@@ -450,7 +480,7 @@ def _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton: dict, params
 
 
 def _add_box_segment(vertices, faces, groups, a, b, thickness: float, group: str, material: str = MATERIAL_BONE) -> None:
-    """Add an oriented rectangular block between two joints."""
+    """Add an oriented rectangular block between two joints with lengthwise support cuts."""
 
     a = np.asarray(a, dtype=float)
     b = np.asarray(b, dtype=float)
@@ -473,27 +503,67 @@ def _add_box_segment(vertices, faces, groups, a, b, thickness: float, group: str
     right /= np.linalg.norm(right)
     up = np.cross(right, forward)
     half = thickness * 0.5
-    corners = []
-    for center in (a, b):
-        corners.extend(
-            [
-                center - right * half - up * half,
-                center + right * half - up * half,
-                center + right * half + up * half,
-                center - right * half + up * half,
-            ]
-        )
-    idx = [_append_vertex(vertices, corner) for corner in corners]
-    for face in [
-        (idx[0], idx[1], idx[2], idx[3]),
-        (idx[4], idx[7], idx[6], idx[5]),
-        (idx[0], idx[4], idx[5], idx[1]),
-        (idx[1], idx[5], idx[6], idx[2]),
-        (idx[2], idx[6], idx[7], idx[3]),
-        (idx[3], idx[7], idx[4], idx[0]),
-    ]:
-        faces.append(face)
-        groups.append(_group_with_material(group, material))
+    segment_count = _box_segment_divisions(length, thickness)
+    ring_indices = []
+    for i in range(segment_count + 1):
+        center = a + forward * (length * i / segment_count)
+        ring_indices.append(_append_box_ring(vertices, center, right, up, half))
+
+    _add_box_cap(faces, groups, ring_indices[0], _group_with_material(group, material), flip=False)
+    _add_box_cap(faces, groups, ring_indices[-1], _group_with_material(group, material), flip=True)
+
+    for i in range(segment_count):
+        current = ring_indices[i]
+        nxt = ring_indices[i + 1]
+        for side_index in range(8):
+            face = (current[side_index], nxt[side_index], nxt[(side_index + 1) % 8], current[(side_index + 1) % 8])
+            faces.append(face)
+            groups.append(_group_with_material(group, material))
+
+
+def _append_box_ring(vertices, center: np.ndarray, right: np.ndarray, up: np.ndarray, half: float) -> tuple[int, ...]:
+    """Append a rectangular ring with mid-edge vertices for subdivision-friendly caps."""
+
+    corners = [
+        center - right * half - up * half,
+        center + right * half - up * half,
+        center + right * half + up * half,
+        center - right * half + up * half,
+    ]
+    ring = [
+        corners[0],
+        (corners[0] + corners[1]) * 0.5,
+        corners[1],
+        (corners[1] + corners[2]) * 0.5,
+        corners[2],
+        (corners[2] + corners[3]) * 0.5,
+        corners[3],
+        (corners[3] + corners[0]) * 0.5,
+    ]
+    center_index = _append_vertex(vertices, center)
+    return tuple([_append_vertex(vertices, point) for point in ring] + [center_index])
+
+
+def _add_box_cap(faces, groups, ring: tuple[int, ...], group: str, flip: bool) -> None:
+    """Cap an 8-point box ring with four quads instead of one large polygon."""
+
+    center = ring[8]
+    cap_faces = [
+        (ring[0], ring[1], center, ring[7]),
+        (ring[1], ring[2], ring[3], center),
+        (center, ring[3], ring[4], ring[5]),
+        (ring[7], center, ring[5], ring[6]),
+    ]
+    for face in cap_faces:
+        faces.append(tuple(reversed(face)) if flip else face)
+        groups.append(group)
+
+
+def _box_segment_divisions(length: float, thickness: float) -> int:
+    """Choose enough cuts that SDiv does not treat long blocks as one giant face."""
+
+    target_span = max(10.0, min(BOX_SEGMENT_MAX_FACE_SPAN, thickness * 0.72))
+    return max(1, int(math.ceil(length / target_span)))
 
 
 def _add_thick_loft_patch(
