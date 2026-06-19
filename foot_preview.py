@@ -44,11 +44,23 @@ def _draw_top_view(canvas: np.ndarray, skeleton: dict, params: FootParams, rect:
     cv2.fillPoly(canvas, [outline], (230, 238, 243))
 
     pts = skeleton["points"]
+    toe_box = skeleton.get("toe_box")
+    if toe_box:
+        toe_outline = np.array([p(v) for v in toe_box["top_outline"]], dtype=np.int32)
+        cv2.fillPoly(canvas, [toe_outline], (218, 230, 238))
+        cv2.polylines(canvas, [toe_outline], True, (92, 124, 148), 2, cv2.LINE_AA)
+
     _line(canvas, p(pts["heel"]), p(pts["ankle"]))
     _line(canvas, p(pts["heel"]), p(pts["instep"]))
     _line(canvas, p(pts["instep"]), p(pts["big_ball"]))
     _line(canvas, p(pts["instep"]), p(pts["small_ball"]))
     _line(canvas, p(pts["big_ball"]), p(pts["small_ball"]))
+    if toe_box:
+        toe_outline = toe_box["top_outline"]
+        _line(canvas, p(pts["big_ball"]), p(toe_outline[0]), (70, 92, 112), 3)
+        _line(canvas, p(pts["small_ball"]), p(toe_outline[-1]), (70, 92, 112), 3)
+        _line(canvas, p(pts["instep"]), p(toe_box["back_center"]), (70, 92, 112), 3)
+        _line(canvas, p(toe_box["back_center"]), p(toe_box["nose"]), (70, 92, 112), 3)
     for toe in skeleton["toes"]:
         chain = [toe["base"], toe["mid"], toe["distal"], toe["tip"]]
         toe_line_width = max(2, min(8, int(toe["radius"] * 0.42)))
@@ -63,8 +75,13 @@ def _draw_top_view(canvas: np.ndarray, skeleton: dict, params: FootParams, rect:
         for key in ["base", "mid", "distal"]:
             _joint(canvas, p(toe[key]), joint_radius, (35, 132, 105))
         _joint(canvas, p(toe["tip"]), max(5, joint_radius), (200, 88, 64))
+    if toe_box:
+        for point in toe_box["top_outline"][1:-1:2]:
+            _joint(canvas, p(point), 4, (35, 132, 105))
+        _joint(canvas, p(toe_box["nose"]), 6, (200, 88, 64))
 
-    label = f"{params.side.upper()}  L:{params.foot_length:.0f}  W:{params.foot_width:.0f}"
+    mode = "SHOE" if toe_box else "BAREFOOT"
+    label = f"{mode}  {params.side.upper()}  L:{params.foot_length:.0f}  W:{params.foot_width:.0f}"
     cv2.putText(canvas, label, (x0 + 18, y0 + h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (78, 88, 102), 1, cv2.LINE_AA)
 
 
@@ -77,16 +94,26 @@ def _draw_side_view(canvas: np.ndarray, skeleton: dict, params: FootParams, rect
 
     cv2.putText(canvas, title, (x0 + 18, y0 + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (62, 72, 86), 1, cv2.LINE_AA)
     pts = skeleton["points"]
+    toe_box = skeleton.get("toe_box")
     sole = skeleton.get("side_sole", [])
     upper = [pts["heel"], pts["instep"], pts["ankle"]]
     if len(sole) >= 2:
         cv2.polylines(canvas, [np.array([p(v) for v in sole], dtype=np.int32)], False, (190, 204, 212), 2, cv2.LINE_AA)
     cv2.polylines(canvas, [np.array([p(v) for v in upper], dtype=np.int32)], False, (182, 202, 216), 2, cv2.LINE_AA)
+    if toe_box:
+        profile = np.array([p(v) for v in toe_box["side_profile"]], dtype=np.int32)
+        cv2.fillPoly(canvas, [profile], (218, 230, 238))
+        cv2.polylines(canvas, [profile], True, (92, 124, 148), 2, cv2.LINE_AA)
 
     _line(canvas, p(pts["heel"]), p(pts["instep"]))
     _line(canvas, p(pts["instep"]), p(pts["ankle"]))
     _line(canvas, p(pts["instep"]), p(pts["big_ball"]))
-    _line(canvas, p(pts["big_ball"]), p(skeleton["toes"][0]["base"]))
+    if toe_box:
+        _line(canvas, p(pts["big_ball"]), p(toe_box["back_center"]), (70, 92, 112), 3)
+        _line(canvas, p(toe_box["back_center"]), p(toe_box["front_center"]), (70, 92, 112), 3)
+        _line(canvas, p(toe_box["front_center"]), p(toe_box["nose"]), (70, 92, 112), 3)
+    elif skeleton["toes"]:
+        _line(canvas, p(pts["big_ball"]), p(skeleton["toes"][0]["base"]))
     for toe in skeleton["toes"]:
         chain = [toe["base"], toe["mid"], toe["distal"], toe["tip"]]
         toe_line_width = max(2, min(8, int(toe["radius"] * 0.42)))
@@ -96,10 +123,20 @@ def _draw_side_view(canvas: np.ndarray, skeleton: dict, params: FootParams, rect
         for key in ["base", "mid", "distal"]:
             _joint(canvas, p(toe[key]), joint_radius, (35, 132, 105))
         _joint(canvas, p(toe["tip"]), max(5, joint_radius), (200, 88, 64))
+    if toe_box:
+        _joint(canvas, p(toe_box["back_center"]), 5, (35, 132, 105))
+        _joint(canvas, p(toe_box["front_center"]), 5, (35, 132, 105))
+        _joint(canvas, p(toe_box["nose"]), 6, (200, 88, 64))
 
     for key in ["ankle", "heel", "instep", "arch", "big_ball"]:
         _joint(canvas, p(pts[key]), 5, (48, 114, 164))
-    label = f"Instep:{params.instep_height:.0f}  Arch:{params.arch_height:.0f}  Lift:{params.toe_lift:.0f}  Curl:{params.toe_curl:.0f}  Pivot:{params.ankle_pivot_angle:.0f}"
+    if toe_box:
+        label = (
+            f"Instep:{params.instep_height:.0f}  ToeBox:{params.toe_box_height:.0f}  "
+            f"Lift:{params.toe_box_lift:.0f}  Sole:{params.sole_thickness:.0f}  Pivot:{params.ankle_pivot_angle:.0f}"
+        )
+    else:
+        label = f"Instep:{params.instep_height:.0f}  Arch:{params.arch_height:.0f}  Lift:{params.toe_lift:.0f}  Curl:{params.toe_curl:.0f}  Pivot:{params.ankle_pivot_angle:.0f}"
     cv2.putText(canvas, label, (x0 + 18, y0 + h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (78, 88, 102), 1, cv2.LINE_AA)
 
 
@@ -116,6 +153,10 @@ def _top_bounds(skeleton: dict) -> tuple[float, float, float, float]:
     values = list(skeleton["points"].values()) + skeleton["outline"]
     for toe in skeleton["toes"]:
         values.extend([toe["base"], toe["mid"], toe["distal"], toe["tip"]])
+    toe_box = skeleton.get("toe_box")
+    if toe_box:
+        values.extend(toe_box["top_outline"])
+        values.extend([toe_box["back_center"], toe_box["front_center"], toe_box["nose"]])
     arr = np.array(values)
     return float(arr[:, 0].min()), float(arr[:, 0].max()), float(arr[:, 1].min()), float(arr[:, 1].max())
 
@@ -124,6 +165,10 @@ def _side_bounds(skeleton: dict, params: FootParams) -> tuple[float, float, floa
     values = list(skeleton["points"].values()) + list(skeleton.get("side_sole", []))
     for toe in skeleton["toes"]:
         values.extend([toe["base"], toe["mid"], toe["distal"], toe["tip"]])
+    toe_box = skeleton.get("toe_box")
+    if toe_box:
+        values.extend(toe_box["side_profile"])
+        values.extend([toe_box["back_center"], toe_box["front_center"], toe_box["nose"]])
     arr = np.array(values)
     return float(arr[:, 1].min()), float(arr[:, 1].max()), -8.0, max(float(arr[:, 2].max()), params.instep_height) + 16.0
 

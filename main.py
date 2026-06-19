@@ -34,12 +34,14 @@ DEFAULT_OUTPUT_DIR = APP_ROOT / "output"
 LAST_PRESET_PATH = APP_ROOT / "last_preset.json"
 OBJ_FILE_PREFIX = "foot_base_mesh"
 SLIDER_GROUPS = [
-    ("基本形状", ["foot_length", "foot_width", "instep_height", "heel_width", "heel_size", "arch_height"]),
-    ("長さ", ["toe_length", "big_toe_length"]),
-    ("角度", ["toe_spread", "big_toe_angle", "ankle_angle", "ankle_pivot_angle"]),
-    ("反り・曲げ", ["toe_curl", "toe_lift"]),
-    ("出力形状", ["toe_thickness", "joint_sphere_scale", "malleolus_size", "instep_part_thickness"]),
-    ("足裏", ["plantar_support_length", "plantar_support_thickness"]),
+    ("basic", "基本形状", ["foot_length", "foot_width", "instep_height", "heel_width", "heel_size", "arch_height"], "both"),
+    ("shoe", "靴用", ["toe_box_width", "toe_box_height", "toe_box_roundness", "toe_box_lift", "sole_thickness", "heel_height", "vamp_volume"], "shoe"),
+    ("toe_length", "足指長さ", ["toe_length", "big_toe_length"], "barefoot"),
+    ("toe_angle", "足指角度", ["toe_spread", "big_toe_angle"], "barefoot"),
+    ("ankle", "足首", ["ankle_angle", "ankle_pivot_angle"], "both"),
+    ("toe_pose", "足指反り・曲げ", ["toe_curl", "toe_lift"], "barefoot"),
+    ("output", "出力形状", ["toe_thickness", "joint_sphere_scale", "malleolus_size", "instep_part_thickness"], "both"),
+    ("sole", "足裏", ["plantar_support_length", "plantar_support_thickness"], "both"),
 ]
 
 
@@ -95,10 +97,11 @@ def main() -> None:
                 mesh_cache = None
                 _update_preview(window, skeleton, params)
                 window["-STATUS-"].update("リセットしました")
-            elif event in PARAM_KEYS or event in ("-SIDE_RIGHT-", "-SIDE_LEFT-", "-PREVIEW_MODE-"):
+            elif event in PARAM_KEYS or event in ("-SIDE_RIGHT-", "-SIDE_LEFT-", "-PREVIEW_MODE-", "-MODE_BAREFOOT-", "-MODE_SHOE-"):
                 params = _params_from_values(values, params.toe_profile)
                 skeleton = calculate_foot_skeleton(params)
                 mesh_cache = None
+                _update_mode_visibility(window, params)
                 _update_preview(window, skeleton, params)
             elif event == "-CHOOSE_OUTPUT_DIR-":
                 selected = sg.popup_get_folder("OBJ保存先フォルダを選択", default_path=str(output_dir), no_window=True)
@@ -140,7 +143,12 @@ def _bring_window_to_front(window: sg.Window) -> None:
 def _slider_controls_layout(params: FootParams) -> list[list[sg.Element]]:
     preview_label = _preview_label_from_value(params.preview_mode)
     rows = [
-        [sg.Text("足タイプ", font=("Helvetica", 13, "bold"))],
+        [sg.Text("生成モード", font=("Helvetica", 13, "bold"))],
+        [
+            sg.Radio("Barefoot mode", "FOOT_MODE", key="-MODE_BAREFOOT-", default=params.foot_mode == "barefoot", enable_events=True),
+            sg.Radio("Shoe base mode", "FOOT_MODE", key="-MODE_SHOE-", default=params.foot_mode == "shoe", enable_events=True),
+        ],
+        [sg.Text("足タイプ", font=("Helvetica", 13, "bold"), pad=(5, (6, 0)))],
         [
             sg.Radio("右足", "SIDE", key="-SIDE_RIGHT-", default=params.side == "right", enable_events=True),
             sg.Radio("左足", "SIDE", key="-SIDE_LEFT-", default=params.side == "left", enable_events=True),
@@ -158,12 +166,13 @@ def _slider_controls_layout(params: FootParams) -> list[list[sg.Element]]:
         [sg.HorizontalSeparator()],
     ]
 
-    for group_title, keys in SLIDER_GROUPS:
-        rows.append([sg.Text(group_title, font=("Helvetica", 11, "bold"), pad=(5, (4, 0)))])
+    for group_id, group_title, keys, mode in SLIDER_GROUPS:
         slider_cells = [_slider_cell(params, key) for key in keys]
+        group_rows = [[sg.Text(group_title, font=("Helvetica", 11, "bold"), pad=(5, (4, 0)))]]
         for left, right in _pairs(slider_cells):
-            rows.append([left, right if right is not None else sg.Text("", size=(24, 1))])
-        rows.append([sg.HorizontalSeparator(pad=(5, 2))])
+            group_rows.append([left, right if right is not None else sg.Text("", size=(24, 1))])
+        group_rows.append([sg.HorizontalSeparator(pad=(5, 2))])
+        rows.append([sg.Column(group_rows, key=f"-GROUP_{group_id}-", visible=_group_visible(mode, params.foot_mode), pad=(0, 0))])
 
     return rows
 
@@ -223,17 +232,20 @@ def _update_preview(window: sg.Window, skeleton: dict, params: FootParams) -> No
 def _params_from_values(values: dict, toe_profile: str = "standard") -> FootParams:
     preview_label = values.get("-PREVIEW_MODE-", "両方表示")
     side = "left" if values.get("-SIDE_LEFT-") else "right"
+    foot_mode = "shoe" if values.get("-MODE_SHOE-") else "barefoot"
     data = {key: float(values[key]) for key in PARAM_KEYS}
     data["side"] = side
     data["preview_mode"] = PREVIEW_OPTIONS.get(preview_label, "both")
+    data["foot_mode"] = foot_mode
     data["toe_profile"] = toe_profile
     return FootParams(**data)
 
 
 def _merge_preserve_choices(preset: FootParams, values: dict) -> FootParams:
     side = "left" if values.get("-SIDE_LEFT-") else "right"
+    foot_mode = "shoe" if values.get("-MODE_SHOE-") else "barefoot"
     preview_label = values.get("-PREVIEW_MODE-", "両方表示")
-    return preset.copy_with(side=side, preview_mode=PREVIEW_OPTIONS.get(preview_label, "both"))
+    return preset.copy_with(side=side, foot_mode=foot_mode, preview_mode=PREVIEW_OPTIONS.get(preview_label, "both"))
 
 
 def _apply_params_to_window(window: sg.Window, params: FootParams) -> None:
@@ -241,8 +253,20 @@ def _apply_params_to_window(window: sg.Window, params: FootParams) -> None:
         window[key].update(getattr(params, key))
     window["-SIDE_RIGHT-"].update(params.side == "right")
     window["-SIDE_LEFT-"].update(params.side == "left")
+    window["-MODE_BAREFOOT-"].update(params.foot_mode == "barefoot")
+    window["-MODE_SHOE-"].update(params.foot_mode == "shoe")
     window["-PREVIEW_MODE-"].update(_preview_label_from_value(params.preview_mode))
+    _update_mode_visibility(window, params)
     _update_preview(window, calculate_foot_skeleton(params), params)
+
+
+def _update_mode_visibility(window: sg.Window, params: FootParams) -> None:
+    for group_id, _title, _keys, mode in SLIDER_GROUPS:
+        window[f"-GROUP_{group_id}-"].update(visible=_group_visible(mode, params.foot_mode))
+
+
+def _group_visible(group_mode: str, foot_mode: str) -> bool:
+    return group_mode == "both" or group_mode == foot_mode
 
 
 def _preview_label_from_value(preview_mode: str) -> str:

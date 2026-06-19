@@ -21,6 +21,13 @@ class FootParams:
     instep_part_thickness: float = 100.0
     plantar_support_length: float = 55.0
     plantar_support_thickness: float = 45.0
+    toe_box_width: float = 96.0
+    toe_box_height: float = 32.0
+    toe_box_roundness: float = 55.0
+    toe_box_lift: float = 6.0
+    sole_thickness: float = 8.0
+    heel_height: float = 0.0
+    vamp_volume: float = 100.0
     toe_spread: float = 12.0
     toe_curl: float = 8.0
     toe_lift: float = 6.0
@@ -30,6 +37,7 @@ class FootParams:
     mesh_resolution: int = 10
     side: str = "right"
     preview_mode: str = "both"
+    foot_mode: str = "barefoot"
     toe_profile: str = "standard"
 
     def copy_with(self, **changes: object) -> "FootParams":
@@ -54,6 +62,13 @@ SLIDER_SPECS = {
     "instep_part_thickness": ("甲パーツ厚み", 60, 240, 5),
     "plantar_support_length": ("足裏芯の長さ", 20, 120, 5),
     "plantar_support_thickness": ("足裏芯の太さ", 20, 130, 5),
+    "toe_box_width": ("つま先幅", 50, 150, 1),
+    "toe_box_height": ("つま先高さ", 12, 70, 1),
+    "toe_box_roundness": ("つま先丸み", 0, 100, 5),
+    "toe_box_lift": ("つま先反り", -10, 35, 1),
+    "sole_thickness": ("靴底厚み", 0, 35, 1),
+    "heel_height": ("かかと高さ", 0, 55, 1),
+    "vamp_volume": ("甲の盛り", 60, 180, 5),
     "toe_spread": ("指の開き", 0, 30, 1),
     "toe_curl": ("指の曲げ", -20, 35, 1),
     "toe_lift": ("指の反り", -45, 30, 1),

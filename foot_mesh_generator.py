@@ -30,6 +30,11 @@ def generate_foot_mesh_from_skeleton(skeleton: dict, params: FootParams) -> tupl
 
     _add_foot_structure_blocks(vertices, faces, groups, skeleton, params)
 
+    if params.foot_mode == "shoe":
+        _add_shoe_sole_wedge(vertices, faces, groups, skeleton, params)
+        _add_toe_box_mesh(vertices, faces, groups, skeleton, params)
+        return vertices, faces, groups
+
     for toe in skeleton["toes"]:
         chain = [toe["base"], toe["mid"], toe["distal"], toe["tip"]]
         radii = [toe["radius"], toe["radius"] * 0.82, toe["radius"] * 0.64, toe["radius"] * 0.42]
@@ -98,7 +103,10 @@ def _add_foot_structure_blocks(vertices, faces, groups, skeleton: dict, params: 
         tendon_end = base + np.array([0.0, -params.foot_length * 0.03, params.instep_height * 0.06])
         _add_box_segment(vertices, faces, groups, tendon_start, tendon_end, max(7.5, thickness * 0.68), "instep")
 
-    _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton, params)
+    if skeleton.get("toe_box"):
+        _add_shoe_forefoot_fill(vertices, faces, groups, skeleton, params)
+    else:
+        _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton, params)
 
 
 def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
@@ -112,8 +120,15 @@ def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootPa
     small_ball = np.asarray(pts["small_ball"], dtype=float)
     mid_ball = (big_ball + small_ball) * 0.5
     toe_bases = [np.asarray(toe["base"], dtype=float) for toe in skeleton["toes"]]
-    toe_root = np.mean(toe_bases, axis=0) + np.array([0.0, -params.foot_length * 0.04, -params.instep_height * 0.04])
+    toe_box = skeleton.get("toe_box")
+    if toe_bases:
+        toe_root = np.mean(toe_bases, axis=0) + np.array([0.0, -params.foot_length * 0.04, -params.instep_height * 0.04])
+    elif toe_box:
+        toe_root = np.asarray(toe_box["back_center"], dtype=float) + np.array([0.0, -params.foot_length * 0.035, -params.instep_height * 0.06])
+    else:
+        toe_root = mid_ball + np.array([0.0, params.foot_length * 0.04, -params.instep_height * 0.08])
     heel_scale = _heel_scale(params)
+    vamp_scale = max(0.70, params.vamp_volume / 100.0) if params.foot_mode == "shoe" else 1.0
 
     centers = [
         heel + np.array([0.0, -params.foot_length * 0.04, 0.0]),
@@ -131,16 +146,16 @@ def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootPa
         params.foot_width * 0.82,
         params.foot_width * 1.00,
         params.foot_width * 1.10,
-        params.foot_width * 0.96,
+        max(params.foot_width * 0.96, params.toe_box_width * 0.92) if toe_box else params.foot_width * 0.96,
     ]
     top_offsets = [
         params.heel_width * 0.22 * heel_scale,
         params.heel_width * 0.26 * heel_scale,
         params.instep_height * 0.38,
-        params.instep_height * 0.84,
-        params.instep_height * 0.58,
-        params.instep_height * 0.34,
-        params.instep_height * 0.18,
+        params.instep_height * 0.84 * vamp_scale,
+        params.instep_height * 0.58 * vamp_scale,
+        params.instep_height * 0.34 * max(0.85, vamp_scale),
+        params.instep_height * 0.18 * max(0.90, vamp_scale * 0.94),
     ]
     bottom_offsets = [
         params.heel_width * 0.16 * heel_scale,
@@ -261,6 +276,18 @@ def _add_flesh_masses(vertices, faces, groups, skeleton: dict, params: FootParam
         bridge_start = forefoot_center + (base - forefoot_center) * 0.25
         bridge_end = base + np.array([0.0, -params.foot_length * 0.025, -params.instep_height * 0.05])
         _add_box_segment(vertices, faces, groups, bridge_start, bridge_end, params.foot_width * 0.10 * instep_scale, "foot_body", material=MATERIAL_SOFT_TISSUE)
+    toe_box = skeleton.get("toe_box")
+    if not toe_bases and toe_box:
+        back = np.asarray(toe_box["back_center"], dtype=float)
+        outline = toe_box["top_outline"]
+        left_back = np.asarray(outline[0], dtype=float)
+        right_back = np.asarray(outline[-1], dtype=float)
+        left_back[2] = back[2]
+        right_back[2] = back[2]
+        bridge_width = params.foot_width * 0.16 * instep_scale * max(0.85, params.vamp_volume / 100.0)
+        _add_box_segment(vertices, faces, groups, forefoot_center, back, bridge_width, "foot_body", material=MATERIAL_SOFT_TISSUE)
+        _add_box_segment(vertices, faces, groups, big_ball, left_back, bridge_width * 0.72, "foot_body", material=MATERIAL_SOFT_TISSUE)
+        _add_box_segment(vertices, faces, groups, small_ball, right_back, bridge_width * 0.72, "foot_body", material=MATERIAL_SOFT_TISSUE)
 
     medial_heel = heel + np.array([medial * params.heel_width * 0.25 * heel_scale, params.foot_length * 0.08, params.heel_width * 0.08 * heel_scale])
     medial_ball = big_ball + np.array([medial * params.foot_width * 0.08, -params.foot_length * 0.06, -params.instep_height * 0.08])
@@ -301,7 +328,8 @@ def _add_side_volume_masses(vertices, faces, groups, skeleton: dict, params: Foo
 
     dorsal_a = instep + np.array([0.0, params.foot_length * 0.02, params.instep_height * 0.04])
     dorsal_b = mid_ball + np.array([0.0, -params.foot_length * 0.02, params.instep_height * 0.12])
-    _add_box_segment(vertices, faces, groups, dorsal_a, dorsal_b, params.foot_width * 0.16 * instep_scale, "instep", material=MATERIAL_SOFT_TISSUE)
+    vamp_scale = max(0.70, params.vamp_volume / 100.0) if params.foot_mode == "shoe" else 1.0
+    _add_box_segment(vertices, faces, groups, dorsal_a, dorsal_b, params.foot_width * 0.16 * instep_scale * vamp_scale, "instep", material=MATERIAL_SOFT_TISSUE)
 
     achilles_a = heel + np.array([0.0, -params.foot_length * 0.04 * heel_scale, params.heel_width * 0.24 * heel_scale])
     achilles_b = ankle + np.array([0.0, params.foot_length * 0.02, -params.instep_height * 0.12])
@@ -351,6 +379,13 @@ def _add_midfoot_fill_masses(vertices, faces, groups, skeleton: dict, params: Fo
         base = np.asarray(toe["base"], dtype=float)
         root = mid_ball + (base - mid_ball) * 0.30 + np.array([0.0, -length * 0.035, -instep_h * 0.05])
         _add_box_segment(vertices, faces, groups, fore_dorsal, root, max(width * 0.12, toe["radius"] * 1.2) * instep_scale, "foot_body", material=MATERIAL_SOFT_TISSUE)
+    toe_box = skeleton.get("toe_box")
+    if not skeleton["toes"] and toe_box:
+        back = np.asarray(toe_box["back_center"], dtype=float) + np.array([0.0, -length * 0.015, -instep_h * 0.05])
+        front = np.asarray(toe_box["front_center"], dtype=float) + np.array([0.0, -length * 0.040, 0.0])
+        vamp_scale = max(0.70, params.vamp_volume / 100.0)
+        _add_box_segment(vertices, faces, groups, fore_dorsal, back, width * 0.18 * instep_scale * vamp_scale, "foot_body", material=MATERIAL_SOFT_TISSUE)
+        _add_box_segment(vertices, faces, groups, back, front, width * 0.15 * instep_scale * vamp_scale, "toe_box", material=MATERIAL_SOFT_TISSUE)
 
 
 def _add_ankle_achilles_masses(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
@@ -405,6 +440,8 @@ def _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton: dict, params
     small_ball = np.asarray(pts["small_ball"], dtype=float)
     mid_ball = (big_ball + small_ball) * 0.5
     toes = skeleton["toes"]
+    if len(toes) < 2:
+        return
     length = params.foot_length
     width = params.foot_width
     instep_h = params.instep_height
@@ -485,6 +522,163 @@ def _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton: dict, params
         crown=instep_h * 0.05,
         group="foot_body",
     )
+
+
+def _add_shoe_forefoot_fill(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
+    """Fill the transition between the sculpt foot body and the unified toe box."""
+
+    toe_box = skeleton.get("toe_box")
+    if not toe_box:
+        return
+
+    pts = skeleton["points"]
+    instep = np.asarray(pts["instep"], dtype=float)
+    big_ball = np.asarray(pts["big_ball"], dtype=float)
+    small_ball = np.asarray(pts["small_ball"], dtype=float)
+    mid_ball = (big_ball + small_ball) * 0.5
+    outline = toe_box["top_outline"]
+    left_back = np.asarray(outline[0], dtype=float)
+    right_back = np.asarray(outline[-1], dtype=float)
+    back = np.asarray(toe_box["back_center"], dtype=float)
+    left_back[2] = back[2] * 0.90
+    right_back[2] = back[2] * 0.90
+
+    length = params.foot_length
+    width = params.foot_width
+    instep_h = params.instep_height
+    instep_scale = _instep_part_scale(params)
+    vamp_scale = max(0.70, params.vamp_volume / 100.0)
+    patch_thickness = max(9.0, instep_h * 0.22) * instep_scale * vamp_scale
+
+    dorsal = mid_ball + np.array([0.0, -length * 0.03, instep_h * 0.10])
+    rear = instep + (dorsal - instep) * 0.70 + np.array([0.0, -length * 0.02, instep_h * 0.06])
+    _add_thick_loft_patch(
+        vertices,
+        faces,
+        groups,
+        big_ball + np.array([-width * 0.05, -length * 0.03, instep_h * 0.00]),
+        left_back,
+        back + np.array([0.0, 0.0, instep_h * 0.02]),
+        rear,
+        u_steps=2,
+        v_steps=2,
+        thickness=patch_thickness,
+        crown=instep_h * 0.05,
+        group="toe_box",
+    )
+    _add_thick_loft_patch(
+        vertices,
+        faces,
+        groups,
+        rear,
+        back + np.array([0.0, 0.0, instep_h * 0.02]),
+        right_back,
+        small_ball + np.array([width * 0.05, -length * 0.03, instep_h * 0.00]),
+        u_steps=2,
+        v_steps=2,
+        thickness=patch_thickness,
+        crown=instep_h * 0.05,
+        group="toe_box",
+    )
+
+
+def _add_toe_box_mesh(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
+    """Add one low-poly rounded toe block for Shoe base mode."""
+
+    toe_box = skeleton.get("toe_box")
+    if not toe_box:
+        return
+
+    stations = toe_box["stations"]
+    x_samples = [-1.0, -0.55, 0.0, 0.55, 1.0]
+    top_grid = []
+    bottom_grid = []
+    for station_index, station in enumerate(stations):
+        half_width = float(station["half_width"]) * (1.08 + 0.04 * toe_box["roundness"])
+        y = float(station["y"])
+        bottom_z = float(station["bottom_z"]) - max(0.0, params.sole_thickness) * 0.10
+        top_z = float(station["top_z"])
+        height = max(6.0, top_z - bottom_z)
+        row_top = []
+        row_bottom = []
+        for sample in x_samples:
+            edge = abs(sample)
+            x = half_width * sample
+            edge_drop = height * (0.13 + 0.06 * toe_box["roundness"]) * edge
+            nose_drop = height * 0.08 * edge if station_index == len(stations) - 1 else 0.0
+            row_top.append(_append_vertex(vertices, (x, y, top_z - edge_drop - nose_drop)))
+            row_bottom.append(_append_vertex(vertices, (x, y, bottom_z - height * 0.025 * (1.0 - edge))))
+        top_grid.append(row_top)
+        bottom_grid.append(row_bottom)
+
+    _append_grid_shell(faces, groups, top_grid, bottom_grid, "toe_box")
+
+
+def _add_shoe_sole_wedge(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
+    """Add a broad sole/heel wedge for Shoe base mode."""
+
+    toe_box = skeleton.get("toe_box")
+    sole = max(0.0, float(params.sole_thickness))
+    heel_h = max(0.0, float(params.heel_height))
+    if not toe_box or (sole < 0.1 and heel_h < 0.1):
+        return
+
+    pts = skeleton["points"]
+    heel = np.asarray(pts["heel"], dtype=float)
+    arch = np.asarray(pts["arch"], dtype=float)
+    big_ball = np.asarray(pts["big_ball"], dtype=float)
+    small_ball = np.asarray(pts["small_ball"], dtype=float)
+    mid_ball = (big_ball + small_ball) * 0.5
+    heel_scale = _heel_scale(params)
+    stations = toe_box["stations"]
+    sole_depth = max(2.0, sole)
+    profile = [
+        (heel[1] - params.foot_length * 0.05, params.heel_width * 0.48 * heel_scale, -sole_depth - heel_h, heel[2] + params.heel_width * 0.02),
+        (heel[1] + params.foot_length * 0.07, params.heel_width * 0.56 * heel_scale, -sole_depth * 0.86 - heel_h * 0.62, heel[2] + params.heel_width * 0.04),
+        (arch[1], params.foot_width * 0.42, -sole_depth * 0.60 - heel_h * 0.32, max(0.0, arch[2] * 0.16)),
+        (mid_ball[1], params.foot_width * 0.54, -sole_depth * 0.46, max(0.0, mid_ball[2] * 0.06)),
+        (stations[1]["y"], stations[1]["half_width"] * 1.02, float(stations[1]["bottom_z"]) - sole_depth * 0.38, float(stations[1]["bottom_z"]) + sole_depth * 0.10),
+        (stations[-1]["y"], stations[-1]["half_width"] * 1.12, float(stations[-1]["bottom_z"]) - sole_depth * 0.28, float(stations[-1]["bottom_z"]) + sole_depth * 0.08),
+    ]
+
+    x_samples = [-1.0, -0.5, 0.0, 0.5, 1.0]
+    top_grid = []
+    bottom_grid = []
+    for y, half_width, bottom_z, top_z in profile:
+        row_top = []
+        row_bottom = []
+        for sample in x_samples:
+            edge = abs(sample)
+            x = half_width * sample
+            row_top.append(_append_vertex(vertices, (x, y, top_z - edge * sole_depth * 0.08)))
+            row_bottom.append(_append_vertex(vertices, (x, y, bottom_z - (1.0 - edge) * sole_depth * 0.06)))
+        top_grid.append(row_top)
+        bottom_grid.append(row_bottom)
+
+    _append_grid_shell(faces, groups, top_grid, bottom_grid, "shoe_sole")
+
+
+def _append_grid_shell(faces, groups, top_grid: list[list[int]], bottom_grid: list[list[int]], group: str) -> None:
+    """Connect matching top/bottom grids into a closed low-poly shell."""
+
+    rows = len(top_grid)
+    cols = len(top_grid[0])
+    for r in range(rows - 1):
+        for c in range(cols - 1):
+            faces.append((top_grid[r][c], top_grid[r][c + 1], top_grid[r + 1][c + 1], top_grid[r + 1][c]))
+            groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
+            faces.append((bottom_grid[r][c], bottom_grid[r + 1][c], bottom_grid[r + 1][c + 1], bottom_grid[r][c + 1]))
+            groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
+    for r in range(rows - 1):
+        faces.append((top_grid[r][0], top_grid[r + 1][0], bottom_grid[r + 1][0], bottom_grid[r][0]))
+        groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
+        faces.append((top_grid[r + 1][-1], top_grid[r][-1], bottom_grid[r][-1], bottom_grid[r + 1][-1]))
+        groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
+    for c in range(cols - 1):
+        faces.append((top_grid[0][c + 1], top_grid[0][c], bottom_grid[0][c], bottom_grid[0][c + 1]))
+        groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
+        faces.append((top_grid[-1][c], top_grid[-1][c + 1], bottom_grid[-1][c + 1], bottom_grid[-1][c]))
+        groups.append(_group_with_material(group, MATERIAL_SOFT_TISSUE))
 
 
 def _add_box_segment(vertices, faces, groups, a, b, thickness: float, group: str, material: str = MATERIAL_BONE) -> None:
