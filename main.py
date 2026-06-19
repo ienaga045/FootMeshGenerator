@@ -48,7 +48,7 @@ def main() -> None:
     params = _load_last_params()
     skeleton = calculate_foot_skeleton(params)
     mesh_cache = None
-    output_dir = _ensure_output_dir()
+    output_dir = _ensure_output_dir(_load_last_output_dir())
 
     layout = [
         [
@@ -100,20 +100,27 @@ def main() -> None:
                 skeleton = calculate_foot_skeleton(params)
                 mesh_cache = None
                 _update_preview(window, skeleton, params)
+            elif event == "-CHOOSE_OUTPUT_DIR-":
+                selected = sg.popup_get_folder("OBJ保存先フォルダを選択", default_path=str(output_dir), no_window=True)
+                if selected:
+                    output_dir = _ensure_output_dir(Path(selected).expanduser())
+                    window["-OUTPUT_DIR-"].update(_output_dir_label(output_dir))
+                    _save_last_params(params, output_dir)
+                    window["-STATUS-"].update(f"保存先を変更しました: {output_dir}")
             elif event == "-EXPORT_OBJ-":
                 params = _params_from_values(values, params.toe_profile)
                 skeleton = calculate_foot_skeleton(params)
                 mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
                 filepath = _next_output_path(output_dir)
                 export_obj(*mesh_cache, filepath, params=params)
-                _save_last_params(params)
+                _save_last_params(params, output_dir)
                 window["-LAST_SAVE-"].update(f"前回保存: {filepath.name}")
                 window["-STATUS-"].update(f"OBJ作成・保存完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])} / {filepath}")
         except Exception as exc:
             window["-STATUS-"].update(f"Error: {exc}")
             sg.popup_error("処理に失敗しました", str(exc))
 
-    _save_last_params(params)
+    _save_last_params(params, output_dir)
     window.close()
 
 
@@ -190,9 +197,10 @@ def _bottom_actions_layout(output_dir: Path) -> list[list[sg.Element]]:
         [sg.Frame("プリセット", preset_rows, pad=(2, 4), relief=sg.RELIEF_GROOVE)],
         [
             sg.Button("OBJ作成・保存", key="-EXPORT_OBJ-", size=(16, 1), button_color=("white", "#3d7f55"), pad=(2, 3)),
+            sg.Button("保存先変更", key="-CHOOSE_OUTPUT_DIR-", size=(12, 1), pad=(2, 3)),
             sg.Button("リセット", key="-RESET-", size=(12, 1), pad=(2, 3)),
         ],
-        [sg.Text(f"保存先: {output_dir}", key="-OUTPUT_DIR-", size=(100, 1), text_color="#36556f", pad=(2, (2, 0)))],
+        [sg.Text(_output_dir_label(output_dir), key="-OUTPUT_DIR-", size=(100, 1), text_color="#36556f", pad=(2, (2, 0)))],
         [sg.Text("前回保存: なし", key="-LAST_SAVE-", size=(100, 1), text_color="#36556f", pad=(2, 0))],
     ]
 
@@ -252,11 +260,16 @@ def _pairs(items: list[sg.Element]):
         yield items[i], right
 
 
-def _ensure_output_dir() -> Path:
+def _ensure_output_dir(output_dir: Path | None = None) -> Path:
     """Create the app-local output directory used for automatic OBJ saves."""
 
-    DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    return DEFAULT_OUTPUT_DIR
+    target = output_dir or DEFAULT_OUTPUT_DIR
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _output_dir_label(output_dir: Path) -> str:
+    return f"保存先: {output_dir}"
 
 
 def _next_output_path(output_dir: Path) -> Path:
@@ -293,11 +306,29 @@ def _load_last_params() -> FootParams:
         return default_params
 
 
-def _save_last_params(params: FootParams) -> None:
+def _load_last_output_dir() -> Path:
+    """Load the previous output directory from JSON, falling back to app/output."""
+
+    if not LAST_PRESET_PATH.exists():
+        return DEFAULT_OUTPUT_DIR
+    try:
+        data = json.loads(LAST_PRESET_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return DEFAULT_OUTPUT_DIR
+        output_dir = data.get("output_dir")
+        if isinstance(output_dir, str) and output_dir.strip():
+            return Path(output_dir).expanduser()
+    except Exception:
+        pass
+    return DEFAULT_OUTPUT_DIR
+
+
+def _save_last_params(params: FootParams, output_dir: Path | None = None) -> None:
     """Save the current GUI parameters so the next launch restores them."""
 
     payload = {
         "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "output_dir": str(output_dir or _load_last_output_dir()),
         "params": params.to_dict(),
     }
     LAST_PRESET_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
