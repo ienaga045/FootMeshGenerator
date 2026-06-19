@@ -18,7 +18,7 @@ SDIV_BONE_THICKNESS_SCALE = 1.70
 SDIV_SOFT_THICKNESS_SCALE = 1.55
 SDIV_SPHERE_RADIUS_SCALE = 1.22
 SDIV_BOX_SIZE_SCALE = np.array([1.12, 1.12, 1.18])
-BOX_SEGMENT_MAX_FACE_SPAN = 28.0
+BOX_SEGMENT_MAX_FACE_SPAN = 56.0
 
 
 def generate_foot_mesh_from_skeleton(skeleton: dict, params: FootParams) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]], list[str]]:
@@ -151,8 +151,8 @@ def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootPa
         params.instep_height * 0.18,
         params.instep_height * 0.16,
     ]
-    centers, widths, top_offsets, bottom_offsets = _densify_skin_profile(centers, widths, top_offsets, bottom_offsets, steps=3)
-    x_samples = [-0.50, -0.375, -0.25, -0.125, 0.0, 0.125, 0.25, 0.375, 0.50]
+    centers, widths, top_offsets, bottom_offsets = _densify_skin_profile(centers, widths, top_offsets, bottom_offsets, steps=2)
+    x_samples = [-0.50, -0.25, 0.0, 0.25, 0.50]
 
     top_grid = []
     bottom_grid = []
@@ -509,60 +509,39 @@ def _add_box_segment(vertices, faces, groups, a, b, thickness: float, group: str
         center = a + forward * (length * i / segment_count)
         ring_indices.append(_append_box_ring(vertices, center, right, up, half))
 
-    _add_box_cap(faces, groups, ring_indices[0], _group_with_material(group, material), flip=False)
-    _add_box_cap(faces, groups, ring_indices[-1], _group_with_material(group, material), flip=True)
+    start = ring_indices[0]
+    end = ring_indices[-1]
+    for face in [(start[0], start[1], start[2], start[3]), (end[0], end[3], end[2], end[1])]:
+        faces.append(face)
+        groups.append(_group_with_material(group, material))
 
     for i in range(segment_count):
         current = ring_indices[i]
         nxt = ring_indices[i + 1]
-        for side_index in range(8):
-            face = (current[side_index], nxt[side_index], nxt[(side_index + 1) % 8], current[(side_index + 1) % 8])
+        for side_index in range(4):
+            face = (current[side_index], nxt[side_index], nxt[(side_index + 1) % 4], current[(side_index + 1) % 4])
             faces.append(face)
             groups.append(_group_with_material(group, material))
 
 
 def _append_box_ring(vertices, center: np.ndarray, right: np.ndarray, up: np.ndarray, half: float) -> tuple[int, ...]:
-    """Append a rectangular ring with mid-edge vertices for subdivision-friendly caps."""
+    """Append a sparse rectangular ring so SDiv can round the block."""
 
-    corners = [
-        center - right * half - up * half,
-        center + right * half - up * half,
-        center + right * half + up * half,
-        center - right * half + up * half,
-    ]
-    ring = [
-        corners[0],
-        (corners[0] + corners[1]) * 0.5,
-        corners[1],
-        (corners[1] + corners[2]) * 0.5,
-        corners[2],
-        (corners[2] + corners[3]) * 0.5,
-        corners[3],
-        (corners[3] + corners[0]) * 0.5,
-    ]
-    center_index = _append_vertex(vertices, center)
-    return tuple([_append_vertex(vertices, point) for point in ring] + [center_index])
-
-
-def _add_box_cap(faces, groups, ring: tuple[int, ...], group: str, flip: bool) -> None:
-    """Cap an 8-point box ring with four quads instead of one large polygon."""
-
-    center = ring[8]
-    cap_faces = [
-        (ring[0], ring[1], center, ring[7]),
-        (ring[1], ring[2], ring[3], center),
-        (center, ring[3], ring[4], ring[5]),
-        (ring[7], center, ring[5], ring[6]),
-    ]
-    for face in cap_faces:
-        faces.append(tuple(reversed(face)) if flip else face)
-        groups.append(group)
+    return tuple(
+        _append_vertex(vertices, point)
+        for point in [
+            center - right * half - up * half,
+            center + right * half - up * half,
+            center + right * half + up * half,
+            center - right * half + up * half,
+        ]
+    )
 
 
 def _box_segment_divisions(length: float, thickness: float) -> int:
     """Choose enough cuts that SDiv does not treat long blocks as one giant face."""
 
-    target_span = max(10.0, min(BOX_SEGMENT_MAX_FACE_SPAN, thickness * 0.72))
+    target_span = max(18.0, min(BOX_SEGMENT_MAX_FACE_SPAN, thickness * 1.15))
     return max(1, int(math.ceil(length / target_span)))
 
 
