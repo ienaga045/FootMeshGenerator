@@ -16,9 +16,19 @@ from presets import PRESETS, get_default_params
 
 PARAM_KEYS = list(SLIDER_SPECS.keys())
 PREVIEW_OPTIONS = {"上面プレビュー": "top", "側面プレビュー": "side", "両方表示": "both"}
-PREVIEW_COLUMN_WIDTH = 790
-CONTROL_COLUMN_WIDTH = 560
-WINDOW_SIZE = (1380, 760)
+PRESET_BUTTON_LABELS = {
+    "標準プリセット": "標準",
+    "幅広プリセット": "幅広",
+    "甲高プリセット": "甲高",
+    "扁平足気味プリセット": "扁平足気味",
+    "指長めプリセット": "指長め",
+    "エジプト型": "エジプト型",
+    "ギリシャ型": "ギリシャ型",
+    "スクエア型": "スクエア型",
+}
+PREVIEW_COLUMN_WIDTH = 780
+CONTROL_COLUMN_WIDTH = 350
+WINDOW_SIZE = (1220, 790)
 APP_ROOT = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = APP_ROOT / "output"
 LAST_PRESET_PATH = APP_ROOT / "last_preset.json"
@@ -29,6 +39,7 @@ SLIDER_GROUPS = [
     ("角度", ["toe_spread", "big_toe_angle", "ankle_angle", "ankle_pivot_angle"]),
     ("反り・曲げ", ["toe_curl", "toe_lift"]),
     ("出力形状", ["toe_thickness", "joint_sphere_scale", "malleolus_size", "instep_part_thickness"]),
+    ("足裏", ["plantar_support_length", "plantar_support_thickness"]),
 ]
 
 
@@ -48,13 +59,13 @@ def main() -> None:
                     *(_bottom_actions_layout(output_dir)),
                 ],
                 pad=(8, 8),
-                size=(PREVIEW_COLUMN_WIDTH, 680),
+                size=(PREVIEW_COLUMN_WIDTH, 710),
                 vertical_alignment="top",
             ),
             sg.Column(
                 _slider_controls_layout(params),
                 vertical_alignment="top",
-                size=(CONTROL_COLUMN_WIDTH, 680),
+                size=(CONTROL_COLUMN_WIDTH, 710),
                 pad=(4, 8),
             ),
         ],
@@ -174,10 +185,9 @@ def _slider_cell(params: FootParams, key: str) -> sg.Column:
 
 
 def _bottom_actions_layout(output_dir: Path) -> list[list[sg.Element]]:
-    preset_rows = [[sg.Button(name, size=(12, 1), pad=(2, 1)) for name in row] for row in _chunks(list(PRESETS.keys()), 4)]
+    preset_rows = [[_preset_button(name) for name in row] for row in _chunks(list(PRESETS.keys()), 4)]
     return [
-        [sg.Text("プリセット", font=("Helvetica", 12, "bold"), pad=(2, 2))],
-        *preset_rows,
+        [sg.Frame("プリセット", preset_rows, pad=(2, 4), relief=sg.RELIEF_GROOVE)],
         [
             sg.Button("OBJ作成・保存", key="-EXPORT_OBJ-", size=(16, 1), button_color=("white", "#3d7f55"), pad=(2, 3)),
             sg.Button("リセット", key="-RESET-", size=(12, 1), pad=(2, 3)),
@@ -185,6 +195,10 @@ def _bottom_actions_layout(output_dir: Path) -> list[list[sg.Element]]:
         [sg.Text(f"保存先: {output_dir}", key="-OUTPUT_DIR-", size=(100, 1), text_color="#36556f", pad=(2, (2, 0)))],
         [sg.Text("前回保存: なし", key="-LAST_SAVE-", size=(100, 1), text_color="#36556f", pad=(2, 0))],
     ]
+
+
+def _preset_button(preset_name: str) -> sg.Button:
+    return sg.Button(PRESET_BUTTON_LABELS.get(preset_name, preset_name), key=preset_name, size=(10, 1), pad=(2, 1))
 
 
 def _preview_bytes(skeleton: dict, params: FootParams) -> bytes:

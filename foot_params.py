@@ -19,6 +19,8 @@ class FootParams:
     joint_sphere_scale: float = 100.0
     malleolus_size: float = 100.0
     instep_part_thickness: float = 100.0
+    plantar_support_length: float = 55.0
+    plantar_support_thickness: float = 45.0
     toe_spread: float = 12.0
     toe_curl: float = 8.0
     toe_lift: float = 6.0
@@ -50,6 +52,8 @@ SLIDER_SPECS = {
     "joint_sphere_scale": ("球体の大きさ", 50, 180, 5),
     "malleolus_size": ("くるぶしの大きさ", 50, 220, 5),
     "instep_part_thickness": ("甲パーツ厚み", 60, 240, 5),
+    "plantar_support_length": ("足裏芯の長さ", 20, 120, 5),
+    "plantar_support_thickness": ("足裏芯の太さ", 20, 130, 5),
     "toe_spread": ("指の開き", 0, 30, 1),
     "toe_curl": ("指の曲げ", -20, 35, 1),
     "toe_lift": ("指の反り", -45, 30, 1),
