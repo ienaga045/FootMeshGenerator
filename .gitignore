@@ -5,3 +5,4 @@ __pycache__/
 *.mtl
 .venv/
 foot_app_launch.log
+last_preset.json

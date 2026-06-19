@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
 
 import PySimpleGUI as sg
@@ -20,6 +21,7 @@ CONTROL_COLUMN_WIDTH = 560
 WINDOW_SIZE = (1380, 760)
 APP_ROOT = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = APP_ROOT / "output"
+LAST_PRESET_PATH = APP_ROOT / "last_preset.json"
 OBJ_FILE_PREFIX = "foot_base_mesh"
 SLIDER_GROUPS = [
     ("基本形状", ["foot_length", "foot_width", "instep_height", "heel_width", "heel_size", "arch_height"]),
@@ -32,7 +34,7 @@ SLIDER_GROUPS = [
 
 def main() -> None:
     sg.theme("SystemDefault")
-    params = get_default_params()
+    params = _load_last_params()
     skeleton = calculate_foot_skeleton(params)
     mesh_cache = None
     output_dir = _ensure_output_dir()
@@ -59,6 +61,7 @@ def main() -> None:
         [sg.Text("Ready", key="-STATUS-", size=(100, 1), text_color="#36556f")],
     ]
     window = sg.Window("Foot Base Mesh Generator", layout, finalize=True, resizable=True, size=WINDOW_SIZE)
+    _update_preview(window, skeleton, params)
     _bring_window_to_front(window)
 
     while True:
@@ -92,12 +95,14 @@ def main() -> None:
                 mesh_cache = generate_foot_mesh_from_skeleton(skeleton, params)
                 filepath = _next_output_path(output_dir)
                 export_obj(*mesh_cache, filepath, params=params)
+                _save_last_params(params)
                 window["-LAST_SAVE-"].update(f"前回保存: {filepath.name}")
                 window["-STATUS-"].update(f"OBJ作成・保存完了: 頂点 {len(mesh_cache[0])}, 面 {len(mesh_cache[1])} / {filepath}")
         except Exception as exc:
             window["-STATUS-"].update(f"Error: {exc}")
             sg.popup_error("処理に失敗しました", str(exc))
 
+    _save_last_params(params)
     window.close()
 
 
@@ -115,6 +120,7 @@ def _bring_window_to_front(window: sg.Window) -> None:
 
 
 def _slider_controls_layout(params: FootParams) -> list[list[sg.Element]]:
+    preview_label = _preview_label_from_value(params.preview_mode)
     rows = [
         [sg.Text("足タイプ", font=("Helvetica", 13, "bold"))],
         [
@@ -124,7 +130,7 @@ def _slider_controls_layout(params: FootParams) -> list[list[sg.Element]]:
         [
             sg.Combo(
                 list(PREVIEW_OPTIONS.keys()),
-                default_value="両方表示",
+                default_value=preview_label,
                 readonly=True,
                 key="-PREVIEW_MODE-",
                 enable_events=True,
@@ -213,9 +219,12 @@ def _apply_params_to_window(window: sg.Window, params: FootParams) -> None:
         window[key].update(getattr(params, key))
     window["-SIDE_RIGHT-"].update(params.side == "right")
     window["-SIDE_LEFT-"].update(params.side == "left")
-    label = next((k for k, v in PREVIEW_OPTIONS.items() if v == params.preview_mode), "両方表示")
-    window["-PREVIEW_MODE-"].update(label)
+    window["-PREVIEW_MODE-"].update(_preview_label_from_value(params.preview_mode))
     _update_preview(window, calculate_foot_skeleton(params), params)
+
+
+def _preview_label_from_value(preview_mode: str) -> str:
+    return next((label for label, value in PREVIEW_OPTIONS.items() if value == preview_mode), "両方表示")
 
 
 def _chunks(items: list[str], size: int):
@@ -248,6 +257,36 @@ def _next_output_path(output_dir: Path) -> Path:
         if not candidate.exists():
             return candidate
     raise RuntimeError("保存ファイル名を作成できませんでした")
+
+
+def _load_last_params() -> FootParams:
+    """Load the previous GUI parameters from JSON, falling back to the standard preset."""
+
+    default_params = get_default_params()
+    if not LAST_PRESET_PATH.exists():
+        return default_params
+    try:
+        data = json.loads(LAST_PRESET_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return default_params
+        params_data = data.get("params", data)
+        if not isinstance(params_data, dict):
+            return default_params
+        valid_keys = set(default_params.to_dict().keys())
+        clean_data = {key: value for key, value in params_data.items() if key in valid_keys}
+        return default_params.copy_with(**clean_data)
+    except Exception:
+        return default_params
+
+
+def _save_last_params(params: FootParams) -> None:
+    """Save the current GUI parameters so the next launch restores them."""
+
+    payload = {
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "params": params.to_dict(),
+    }
+    LAST_PRESET_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
