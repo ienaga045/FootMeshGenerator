@@ -84,7 +84,7 @@ PY
 
 OBJ出力時は内部mm相当値を `0.004` 倍して書き出します。参考にした手ベースメッシュOBJの約1単位スケールに近づけ、Nomad SculptやZBrush上で並べて扱いやすくするためです。
 
-Nomad SculptやZBrush側で一括SDivしやすいように、OBJは `foot_base_mesh` の単一オブジェクト/単一グループとして出力します。Nomad Sculptがマテリアル単位でオブジェクト分割することを避けるため、MTLや `usemtl` は書き出しません。
+Nomad SculptやZBrush側で一括SDivしやすいように、OBJは `foot_base_mesh` の単一オブジェクト/単一グループとして出力します。Nomad Sculptがマテリアル単位でオブジェクト分割することを避けるため、MTLや `usemtl` は書き出しません。色分けはOBJの頂点カラー形式、つまり `v x y z r g b` で書き出します。
 
 足指は四角いブロックと球体ジョイントで生成します。円柱形状は使わず、付け根・中間関節・末節関節・指先へ球体を重ねます。SDiv、Dynamesh、Voxel Remesh後に節を残しやすい構成です。
 

@@ -287,9 +287,9 @@ def _add_side_volume_masses(vertices, faces, groups, skeleton: dict, params: Foo
     instep_scale = _instep_part_scale(params)
     heel_scale = _heel_scale(params)
 
-    plantar_a = heel + np.array([0.0, params.foot_length * 0.08, -params.instep_height * 0.18 * heel_scale])
-    plantar_b = mid_ball + np.array([0.0, -params.foot_length * 0.04, -params.instep_height * 0.20])
-    _add_box_segment(vertices, faces, groups, plantar_a, plantar_b, params.foot_width * 0.20 * instep_scale * max(1.0, heel_scale * 0.90), "foot_body", material=MATERIAL_SOFT_TISSUE)
+    plantar_a = heel + np.array([0.0, params.foot_length * 0.08, -params.instep_height * 0.09 * heel_scale])
+    plantar_b = mid_ball + np.array([0.0, -params.foot_length * 0.04, -params.instep_height * 0.11])
+    _add_box_segment(vertices, faces, groups, plantar_a, plantar_b, params.foot_width * 0.11 * instep_scale * max(1.0, heel_scale * 0.82), "foot_body", material=MATERIAL_SOFT_TISSUE)
 
     dorsal_a = instep + np.array([0.0, params.foot_length * 0.02, params.instep_height * 0.04])
     dorsal_b = mid_ball + np.array([0.0, -params.foot_length * 0.02, params.instep_height * 0.12])
@@ -302,7 +302,7 @@ def _add_side_volume_masses(vertices, faces, groups, skeleton: dict, params: Foo
     for side in (-1.0, 1.0):
         rail_a = heel + np.array([side * params.heel_width * 0.38 * heel_scale, params.foot_length * 0.10, params.heel_width * 0.04 * heel_scale])
         rail_b = mid_ball + np.array([side * params.foot_width * 0.42, -params.foot_length * 0.02, -params.instep_height * 0.04])
-        _add_box_segment(vertices, faces, groups, rail_a, rail_b, params.foot_width * 0.10 * instep_scale, "foot_body", material=MATERIAL_SOFT_TISSUE)
+        _add_box_segment(vertices, faces, groups, rail_a, rail_b, params.foot_width * 0.075 * instep_scale, "foot_body", material=MATERIAL_SOFT_TISSUE)
 
 
 def _add_midfoot_fill_masses(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:
