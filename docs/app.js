@@ -581,11 +581,6 @@ function addFootBody(mesh, skeleton, p) {
   const jointScale = p.joint_sphere_scale / 100;
 
   addBodyShell(mesh, skeleton, p);
-  if (skeleton.toe_box) {
-    addShoeForefootFill(mesh, skeleton, p);
-    return;
-  }
-
   addFleshMasses(mesh, skeleton, p);
   addSideVolumeMasses(mesh, skeleton, p);
   addMidfootFillMasses(mesh, skeleton, p);
@@ -613,6 +608,7 @@ function addFootBody(mesh, skeleton, p) {
   }
   if (skeleton.toe_box) {
     addBoxSegment(mesh, midBall, skeleton.toe_box.back_center, p.foot_width * 0.18 * instepScale * Math.max(0.7, p.vamp_volume / 100), "toe_box", "soft_tissue");
+    addShoeForefootFill(mesh, skeleton, p);
   } else {
     skeleton.toes.forEach((toe, index) => {
       const root0 = add(instep, mul(sub(toe.base, instep), 0.35));
@@ -1187,7 +1183,7 @@ function exportObj(vertices, faces, groups, p) {
     const color = colors[i];
     lines.push(`v ${(point.x * OBJ_EXPORT_SCALE).toFixed(5)} ${(point.y * OBJ_EXPORT_SCALE).toFixed(5)} ${(point.z * OBJ_EXPORT_SCALE).toFixed(5)} ${color[0].toFixed(4)} ${color[1].toFixed(4)} ${color[2].toFixed(4)}`);
   }
-  lines.push("", "o foot_base_mesh", `g ${p.foot_mode === "shoe" ? "toe_box" : "foot_base_mesh"}`);
+  lines.push("", "o foot_base_mesh", "g foot_base_mesh");
   for (const face of faces) lines.push(`f ${face.join(" ")}`);
   return `${lines.join("\n")}\n`;
 }

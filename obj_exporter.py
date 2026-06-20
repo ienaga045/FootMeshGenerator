@@ -31,9 +31,8 @@ def export_obj(vertices: list[tuple[float, float, float]], faces: list[tuple[int
         for (x, y, z), (r, g, b) in zip(vertices, vertex_colors):
             f.write(f"v {x * OBJ_EXPORT_SCALE:.5f} {y * OBJ_EXPORT_SCALE:.5f} {z * OBJ_EXPORT_SCALE:.5f} {r:.4f} {g:.4f} {b:.4f}\n")
         f.write("\n")
-        export_group = "toe_box" if getattr(params, "foot_mode", "barefoot") == "shoe" else "foot_base_mesh"
         f.write("o foot_base_mesh\n")
-        f.write(f"g {export_group}\n")
+        f.write("g foot_base_mesh\n")
         for face in faces:
             f.write("f " + " ".join(str(i) for i in face) + "\n")
 
