@@ -55,7 +55,7 @@ const SLIDER_SPECS = {
   joint_sphere_scale: ["球体の大きさ", 50, 180, 5],
   malleolus_size: ["くるぶしの大きさ", 50, 220, 5],
   instep_part_thickness: ["甲パーツ厚み", 60, 240, 5],
-  plantar_support_length: ["足裏芯の長さ", 20, 120, 5],
+  plantar_support_length: ["足裏芯の長さ", 0, 120, 2],
   plantar_support_thickness: ["足裏芯の太さ", 20, 130, 5],
   toe_box_width: ["つま先幅", 50, 150, 1],
   toe_box_height: ["つま先高さ", 12, 70, 1],
@@ -813,16 +813,18 @@ function addSideVolumeMasses(mesh, skeleton, p) {
   const midBall = mul(add(bigBall, smallBall), 0.5);
   const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
   const heelScale = Math.max(0.35, p.heel_size / 100);
-  const supportLength = Math.max(0.2, p.plantar_support_length / 100);
   const supportThickness = Math.max(0.2, p.plantar_support_thickness / 100);
-  const plantarRear = add(heel, v(0, p.foot_length * 0.08, -p.instep_height * 0.06 * heelScale));
-  const plantarFront = add(midBall, v(0, -p.foot_length * 0.07, -p.instep_height * 0.05));
-  const plantarArch = add(arch, v(0, p.foot_length * 0.04, p.arch_height * 0.18));
-  const plantarStart = add(plantarArch, mul(sub(plantarRear, plantarArch), supportLength));
-  const plantarEnd = add(plantarArch, mul(sub(plantarFront, plantarArch), supportLength));
-  const plantarWidth = p.foot_width * 0.075 * instepScale * supportThickness * Math.max(1, heelScale * 0.78);
-  addBoxSegment(mesh, plantarStart, plantarArch, plantarWidth, "foot_body", "soft_tissue");
-  addBoxSegment(mesh, plantarArch, plantarEnd, plantarWidth * 0.92, "foot_body", "soft_tissue");
+  const supportLength = p.plantar_support_length <= 0 ? 0 : clamp(p.plantar_support_length / 100, 0.02, 1.2);
+  if (supportLength > 0) {
+    const plantarRear = add(heel, v(0, p.foot_length * 0.08, -p.instep_height * 0.06 * heelScale));
+    const plantarFront = add(midBall, v(0, -p.foot_length * 0.07, -p.instep_height * 0.05));
+    const plantarArch = add(arch, v(0, p.foot_length * 0.04, p.arch_height * 0.18));
+    const plantarStart = add(plantarArch, mul(sub(plantarRear, plantarArch), supportLength));
+    const plantarEnd = add(plantarArch, mul(sub(plantarFront, plantarArch), supportLength));
+    const plantarWidth = p.foot_width * 0.075 * instepScale * supportThickness * Math.max(1, heelScale * 0.78);
+    addBoxSegment(mesh, plantarStart, plantarArch, plantarWidth, "foot_body", "soft_tissue");
+    addBoxSegment(mesh, plantarArch, plantarEnd, plantarWidth * 0.92, "foot_body", "soft_tissue");
+  }
 
   const dorsalA = add(pts.instep, v(0, p.foot_length * 0.02, p.instep_height * 0.04));
   const dorsalB = add(midBall, v(0, -p.foot_length * 0.02, p.instep_height * 0.12));
