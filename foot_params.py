@@ -60,7 +60,7 @@ SLIDER_SPECS = {
     "joint_sphere_scale": ("球体の大きさ", 50, 180, 5),
     "malleolus_size": ("くるぶしの大きさ", 50, 220, 5),
     "instep_part_thickness": ("甲パーツ厚み", 60, 240, 5),
-    "plantar_support_length": ("足裏芯の長さ", 20, 120, 5),
+    "plantar_support_length": ("足裏芯の長さ", 0, 120, 2),
     "plantar_support_thickness": ("足裏芯の太さ", 20, 130, 5),
     "toe_box_width": ("つま先幅", 50, 150, 1),
     "toe_box_height": ("つま先高さ", 12, 70, 1),

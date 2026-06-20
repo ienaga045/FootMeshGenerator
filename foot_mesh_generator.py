@@ -314,16 +314,17 @@ def _add_side_volume_masses(vertices, faces, groups, skeleton: dict, params: Foo
     instep_scale = _instep_part_scale(params)
     heel_scale = _heel_scale(params)
 
-    support_length = max(0.20, float(params.plantar_support_length) / 100.0)
     support_thickness = max(0.20, float(params.plantar_support_thickness) / 100.0)
-    plantar_rear = heel + np.array([0.0, params.foot_length * 0.08, -params.instep_height * 0.06 * heel_scale])
-    plantar_front = mid_ball + np.array([0.0, -params.foot_length * 0.07, -params.instep_height * 0.05])
-    plantar_arch = arch + np.array([0.0, params.foot_length * 0.04, params.arch_height * 0.18])
-    plantar_start = plantar_arch + (plantar_rear - plantar_arch) * support_length
-    plantar_end = plantar_arch + (plantar_front - plantar_arch) * support_length
-    plantar_width = params.foot_width * 0.075 * instep_scale * support_thickness * max(1.0, heel_scale * 0.78)
-    _add_box_segment(vertices, faces, groups, plantar_start, plantar_arch, plantar_width, "foot_body", material=MATERIAL_SOFT_TISSUE)
-    _add_box_segment(vertices, faces, groups, plantar_arch, plantar_end, plantar_width * 0.92, "foot_body", material=MATERIAL_SOFT_TISSUE)
+    support_length = 0.0 if params.plantar_support_length <= 0 else min(1.20, max(0.02, float(params.plantar_support_length) / 100.0))
+    if support_length > 0.0:
+        plantar_rear = heel + np.array([0.0, params.foot_length * 0.08, -params.instep_height * 0.06 * heel_scale])
+        plantar_front = mid_ball + np.array([0.0, -params.foot_length * 0.07, -params.instep_height * 0.05])
+        plantar_arch = arch + np.array([0.0, params.foot_length * 0.04, params.arch_height * 0.18])
+        plantar_start = plantar_arch + (plantar_rear - plantar_arch) * support_length
+        plantar_end = plantar_arch + (plantar_front - plantar_arch) * support_length
+        plantar_width = params.foot_width * 0.075 * instep_scale * support_thickness * max(1.0, heel_scale * 0.78)
+        _add_box_segment(vertices, faces, groups, plantar_start, plantar_arch, plantar_width, "foot_body", material=MATERIAL_SOFT_TISSUE)
+        _add_box_segment(vertices, faces, groups, plantar_arch, plantar_end, plantar_width * 0.92, "foot_body", material=MATERIAL_SOFT_TISSUE)
 
     dorsal_a = instep + np.array([0.0, params.foot_length * 0.02, params.instep_height * 0.04])
     dorsal_b = mid_ball + np.array([0.0, -params.foot_length * 0.02, params.instep_height * 0.12])
