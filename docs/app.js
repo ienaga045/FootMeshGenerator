@@ -580,10 +580,19 @@ function addFootBody(mesh, skeleton, p) {
   const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
   const jointScale = p.joint_sphere_scale / 100;
 
-  const toeRoot = skeleton.toe_box
-    ? add(skeleton.toe_box.back_center, v(0, -p.foot_length * 0.035, -p.instep_height * 0.06))
-    : add(avg(skeleton.toes.map((toe) => toe.base)), v(0, -p.foot_length * 0.04, -p.instep_height * 0.04));
-  addBodyShell(mesh, [heel, add(heel, v(0, p.foot_length * 0.1, p.heel_width * 0.04)), arch, instep, midBall, toeRoot], p);
+  addBodyShell(mesh, skeleton, p);
+  addFleshMasses(mesh, skeleton, p);
+  addSideVolumeMasses(mesh, skeleton, p);
+  addMidfootFillMasses(mesh, skeleton, p);
+  addAnkleAchillesMasses(mesh, skeleton, p);
+  addSubdividedBox(
+    mesh,
+    heel,
+    v(p.heel_width * 0.92 * heelScale, p.foot_length * 0.16 * (0.85 + heelScale * 0.15), p.heel_width * 0.24 * heelScale),
+    [2, 3, 2],
+    "heel",
+    "soft_tissue",
+  );
   addUvSphere(mesh, heel, p.heel_width * 0.24 * jointScale * heelScale, p.mesh_resolution, "heel", "joint_sphere");
   addUvSphere(mesh, bigBall, p.foot_width * 0.13 * jointScale, p.mesh_resolution, "foot_body", "joint_sphere");
   addUvSphere(mesh, smallBall, p.foot_width * 0.12 * jointScale, p.mesh_resolution, "foot_body", "joint_sphere");
@@ -600,33 +609,312 @@ function addFootBody(mesh, skeleton, p) {
   if (skeleton.toe_box) {
     addBoxSegment(mesh, midBall, skeleton.toe_box.back_center, p.foot_width * 0.18 * instepScale * Math.max(0.7, p.vamp_volume / 100), "toe_box", "soft_tissue");
   } else {
-    for (const toe of skeleton.toes) {
-      const root = add(instep, mul(sub(toe.base, instep), 0.35));
-      addBoxSegment(mesh, root, toe.base, Math.max(8, toe.radius * 1.36) * instepScale, "foot_body", "bone");
-    }
+    skeleton.toes.forEach((toe, index) => {
+      const root0 = add(instep, mul(sub(toe.base, instep), 0.35));
+      const root = v(root0.x, root0.y, Math.max(root0.z, p.instep_height * 0.35));
+      const thickness = Math.max(8, toe.radius * (index === 0 ? 1.58 : 1.36)) * instepScale;
+      const tendonStart = add(add(instep, mul(sub(toe.base, instep), 0.18)), v(0, 0, p.instep_height * 0.08));
+      const tendonEnd = add(toe.base, v(0, -p.foot_length * 0.03, p.instep_height * 0.06));
+      addBoxSegment(mesh, root, toe.base, thickness, "foot_body", "bone");
+      addBoxSegment(mesh, instep, root, thickness * 0.86, "instep", "bone");
+      addBoxSegment(mesh, tendonStart, tendonEnd, Math.max(7.5, thickness * 0.68), "instep", "bone");
+    });
+    addMetatarsalWebs(mesh, skeleton, p);
   }
 }
 
-function addBodyShell(mesh, centers, p) {
+function addBodyShell(mesh, skeleton, p) {
+  const pts = skeleton.points;
+  const heel = pts.heel;
+  const arch = pts.arch;
+  const instep = pts.instep;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const midBall = mul(add(bigBall, smallBall), 0.5);
+  const heelScale = Math.max(0.35, p.heel_size / 100);
+  const toeRoot = skeleton.toe_box
+    ? add(skeleton.toe_box.back_center, v(0, -p.foot_length * 0.035, -p.instep_height * 0.06))
+    : add(avg(skeleton.toes.map((toe) => toe.base)), v(0, -p.foot_length * 0.04, -p.instep_height * 0.04));
+  const vampScale = p.foot_mode === "shoe" ? Math.max(0.7, p.vamp_volume / 100) : 1;
+  const centers = [
+    add(heel, v(0, -p.foot_length * 0.04, 0)),
+    add(heel, v(0, p.foot_length * 0.06, p.heel_width * 0.04)),
+    add(arch, v(0, p.foot_length * 0.02, -p.instep_height * 0.08)),
+    add(instep, v(0, p.foot_length * 0.03, -p.instep_height * 0.08)),
+    add(mul(add(instep, midBall), 0.5), v(0, -p.foot_length * 0.01, -p.instep_height * 0.1)),
+    add(midBall, v(0, -p.foot_length * 0.02, -p.instep_height * 0.12)),
+    toeRoot,
+  ];
+  const widths = [
+    p.heel_width * 0.92 * heelScale,
+    p.heel_width * 1.08 * heelScale,
+    p.foot_width * 0.7,
+    p.foot_width * 0.82,
+    p.foot_width,
+    p.foot_width * 1.1,
+    skeleton.toe_box ? Math.max(p.foot_width * 0.96, p.toe_box_width * 0.92) : p.foot_width * 0.96,
+  ];
+  const topOffsets = [
+    p.heel_width * 0.22 * heelScale,
+    p.heel_width * 0.26 * heelScale,
+    p.instep_height * 0.38,
+    p.instep_height * 0.84 * vampScale,
+    p.instep_height * 0.58 * vampScale,
+    p.instep_height * 0.34 * Math.max(0.85, vampScale),
+    p.instep_height * 0.18 * Math.max(0.9, vampScale * 0.94),
+  ];
+  const bottomOffsets = [
+    p.heel_width * 0.16 * heelScale,
+    p.heel_width * 0.16 * heelScale,
+    p.instep_height * 0.18,
+    p.instep_height * 0.16,
+    p.instep_height * 0.16,
+    p.instep_height * 0.18,
+    p.instep_height * 0.16,
+  ];
+  const profile = densifyProfile(centers, widths, topOffsets, bottomOffsets, 2);
   const xSamples = [-0.5, -0.25, 0, 0.25, 0.5];
   const top = [];
   const bottom = [];
-  centers.forEach((center, i) => {
-    const t = i / Math.max(1, centers.length - 1);
-    const width = lerp(p.heel_width * 0.95, p.foot_width * 1.12, t);
-    const topOffset = lerp(p.heel_width * 0.24, p.instep_height * 0.42, Math.sin(Math.PI * t));
-    const bottomOffset = lerp(p.heel_width * 0.14, p.instep_height * 0.16, t);
+  profile.centers.forEach((center, i) => {
+    const width = profile.widths[i] * 1.1;
+    const topOffset = profile.topOffsets[i] * 1.14;
+    const bottomOffset = profile.bottomOffsets[i] * 1.24;
     const topRow = [];
     const bottomRow = [];
     for (const sample of xSamples) {
       const crown = 1 - Math.abs(sample) * 0.42;
-      topRow.push(addVertex(mesh, v(center.x + sample * width * 1.1, center.y, center.z + topOffset * crown)));
-      bottomRow.push(addVertex(mesh, v(center.x + sample * width * 1.1, center.y, center.z - bottomOffset)));
+      const sideDrop = Math.abs(sample) * p.instep_height * 0.08;
+      topRow.push(addVertex(mesh, v(center.x + sample * width, center.y, center.z + topOffset * crown - sideDrop)));
+      bottomRow.push(addVertex(mesh, v(center.x + sample * width, center.y, center.z - bottomOffset)));
     }
     top.push(topRow);
     bottom.push(bottomRow);
   });
   appendGridShell(mesh, top, bottom, "foot_body", "soft_tissue");
+}
+
+function densifyProfile(centers, widths, topOffsets, bottomOffsets, steps) {
+  const dense = { centers: [], widths: [], topOffsets: [], bottomOffsets: [] };
+  for (let i = 0; i < centers.length - 1; i++) {
+    for (let step = 0; step < steps; step++) {
+      const t = step / steps;
+      dense.centers.push(lerpVec(centers[i], centers[i + 1], t));
+      dense.widths.push(lerp(widths[i], widths[i + 1], t));
+      dense.topOffsets.push(lerp(topOffsets[i], topOffsets[i + 1], t));
+      dense.bottomOffsets.push(lerp(bottomOffsets[i], bottomOffsets[i + 1], t));
+    }
+  }
+  dense.centers.push(centers[centers.length - 1]);
+  dense.widths.push(widths[widths.length - 1]);
+  dense.topOffsets.push(topOffsets[topOffsets.length - 1]);
+  dense.bottomOffsets.push(bottomOffsets[bottomOffsets.length - 1]);
+  return dense;
+}
+
+function addFleshMasses(mesh, skeleton, p) {
+  const pts = skeleton.points;
+  const heel = pts.heel;
+  const instep = pts.instep;
+  const arch = pts.arch;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const sideSign = p.side === "right" ? -1 : 1;
+  const medial = sideSign;
+  const lateral = -sideSign;
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const heelScale = Math.max(0.35, p.heel_size / 100);
+  const forefootCenter = add(mul(add(bigBall, smallBall), 0.5), v(0, p.foot_length * 0.015, -p.instep_height * 0.05));
+
+  if (skeleton.toes.length) {
+    for (const toe of skeleton.toes) {
+      const bridgeStart = add(forefootCenter, mul(sub(toe.base, forefootCenter), 0.25));
+      const bridgeEnd = add(toe.base, v(0, -p.foot_length * 0.025, -p.instep_height * 0.05));
+      addBoxSegment(mesh, bridgeStart, bridgeEnd, p.foot_width * 0.1 * instepScale, "foot_body", "soft_tissue");
+    }
+  } else if (skeleton.toe_box) {
+    const back = skeleton.toe_box.back_center;
+    const outline = skeleton.toe_box.top_outline;
+    const leftBack = v(outline[0].x, outline[0].y, back.z);
+    const rightBack = v(outline[outline.length - 1].x, outline[outline.length - 1].y, back.z);
+    const bridgeWidth = p.foot_width * 0.16 * instepScale * Math.max(0.85, p.vamp_volume / 100);
+    addBoxSegment(mesh, forefootCenter, back, bridgeWidth, "foot_body", "soft_tissue");
+    addBoxSegment(mesh, bigBall, leftBack, bridgeWidth * 0.72, "foot_body", "soft_tissue");
+    addBoxSegment(mesh, smallBall, rightBack, bridgeWidth * 0.72, "foot_body", "soft_tissue");
+  }
+
+  const medialHeel = add(heel, v(medial * p.heel_width * 0.25 * heelScale, p.foot_length * 0.08, p.heel_width * 0.08 * heelScale));
+  const medialBall = add(bigBall, v(medial * p.foot_width * 0.08, -p.foot_length * 0.06, -p.instep_height * 0.08));
+  const lateralHeel = add(heel, v(lateral * p.heel_width * 0.25 * heelScale, p.foot_length * 0.08, p.heel_width * 0.08 * heelScale));
+  const lateralBall = add(smallBall, v(lateral * p.foot_width * 0.08, -p.foot_length * 0.06, -p.instep_height * 0.08));
+  addBoxSegment(mesh, medialHeel, medialBall, p.foot_width * 0.13 * instepScale, "foot_body", "soft_tissue");
+  addBoxSegment(mesh, lateralHeel, lateralBall, p.foot_width * 0.14 * instepScale, "foot_body", "soft_tissue");
+
+  const archPad = add(arch, v(0, p.foot_length * 0.05, p.arch_height * 0.16));
+  const heelAnchor = add(heel, v(0, p.foot_length * 0.03, p.heel_width * 0.06 * heelScale));
+  addBoxSegment(mesh, heelAnchor, archPad, p.foot_width * 0.11 * instepScale * Math.max(1, heelScale * 0.86), "foot_body", "soft_tissue");
+}
+
+function addSideVolumeMasses(mesh, skeleton, p) {
+  const pts = skeleton.points;
+  const heel = pts.heel;
+  const arch = pts.arch;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const midBall = mul(add(bigBall, smallBall), 0.5);
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const heelScale = Math.max(0.35, p.heel_size / 100);
+  const supportLength = Math.max(0.2, p.plantar_support_length / 100);
+  const supportThickness = Math.max(0.2, p.plantar_support_thickness / 100);
+  const plantarRear = add(heel, v(0, p.foot_length * 0.08, -p.instep_height * 0.06 * heelScale));
+  const plantarFront = add(midBall, v(0, -p.foot_length * 0.07, -p.instep_height * 0.05));
+  const plantarArch = add(arch, v(0, p.foot_length * 0.04, p.arch_height * 0.18));
+  const plantarStart = add(plantarArch, mul(sub(plantarRear, plantarArch), supportLength));
+  const plantarEnd = add(plantarArch, mul(sub(plantarFront, plantarArch), supportLength));
+  const plantarWidth = p.foot_width * 0.075 * instepScale * supportThickness * Math.max(1, heelScale * 0.78);
+  addBoxSegment(mesh, plantarStart, plantarArch, plantarWidth, "foot_body", "soft_tissue");
+  addBoxSegment(mesh, plantarArch, plantarEnd, plantarWidth * 0.92, "foot_body", "soft_tissue");
+
+  const dorsalA = add(pts.instep, v(0, p.foot_length * 0.02, p.instep_height * 0.04));
+  const dorsalB = add(midBall, v(0, -p.foot_length * 0.02, p.instep_height * 0.12));
+  const vampScale = p.foot_mode === "shoe" ? Math.max(0.7, p.vamp_volume / 100) : 1;
+  addBoxSegment(mesh, dorsalA, dorsalB, p.foot_width * 0.16 * instepScale * vampScale, "instep", "soft_tissue");
+
+  for (const side of [-1, 1]) {
+    const railA = add(heel, v(side * p.heel_width * 0.38 * heelScale, p.foot_length * 0.1, p.heel_width * 0.04 * heelScale));
+    const railB = add(midBall, v(side * p.foot_width * 0.42, -p.foot_length * 0.02, -p.instep_height * 0.04));
+    addBoxSegment(mesh, railA, railB, p.foot_width * 0.075 * instepScale, "foot_body", "soft_tissue");
+  }
+}
+
+function addMidfootFillMasses(mesh, skeleton, p) {
+  const pts = skeleton.points;
+  const heel = pts.heel;
+  const instep = pts.instep;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const midBall = mul(add(bigBall, smallBall), 0.5);
+  const length = p.foot_length;
+  const width = p.foot_width;
+  const instepH = p.instep_height;
+  const heelW = p.heel_width * Math.max(0.35, p.heel_size / 100);
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const rearDorsal = add(heel, v(0, length * 0.1, heelW * 0.22));
+  const midDorsal = add(instep, v(0, length * 0.05, instepH * 0.1));
+  const foreDorsal = add(midBall, v(0, -length * 0.06, instepH * 0.08));
+  const deepCoreA = add(heel, v(0, length * 0.08, heelW * 0.12));
+  const deepCoreB = add(midBall, v(0, -length * 0.05, instepH * 0.02));
+  addBoxSegment(mesh, deepCoreA, deepCoreB, width * 0.3 * instepScale, "foot_body", "soft_tissue");
+  addBoxSegment(mesh, rearDorsal, midDorsal, width * 0.24 * instepScale, "instep", "soft_tissue");
+  addBoxSegment(mesh, midDorsal, foreDorsal, width * 0.22 * instepScale, "instep", "soft_tissue");
+
+  for (const side of [-1, 1]) {
+    const sideRear = add(heel, v(side * heelW * 0.36, length * 0.08, heelW * 0.12));
+    const sideMid = add(instep, v(side * width * 0.33, length * 0.05, -instepH * 0.02));
+    const sideFore = add(midBall, v(side * width * 0.42, -length * 0.05, -instepH * 0.05));
+    addBoxSegment(mesh, sideRear, sideMid, width * 0.13 * instepScale, "foot_body", "soft_tissue");
+    addBoxSegment(mesh, sideMid, sideFore, width * 0.14 * instepScale, "foot_body", "soft_tissue");
+  }
+
+  if (skeleton.toe_box) {
+    const back = add(skeleton.toe_box.back_center, v(0, -length * 0.015, -instepH * 0.05));
+    const front = add(skeleton.toe_box.front_center, v(0, -length * 0.04, 0));
+    const vampScale = Math.max(0.7, p.vamp_volume / 100);
+    addBoxSegment(mesh, foreDorsal, back, width * 0.18 * instepScale * vampScale, "foot_body", "soft_tissue");
+    addBoxSegment(mesh, back, front, width * 0.15 * instepScale * vampScale, "toe_box", "soft_tissue");
+  } else {
+    for (const toe of skeleton.toes) {
+      const root = add(midBall, add(mul(sub(toe.base, midBall), 0.3), v(0, -length * 0.035, -instepH * 0.05)));
+      addBoxSegment(mesh, foreDorsal, root, Math.max(width * 0.12, toe.radius * 1.2) * instepScale, "foot_body", "soft_tissue");
+    }
+  }
+}
+
+function addAnkleAchillesMasses(mesh, skeleton, p) {
+  const pts = skeleton.points;
+  const heel = pts.heel;
+  const ankle = pts.ankle;
+  const instep = pts.instep;
+  const arch = pts.arch;
+  const length = p.foot_length;
+  const width = p.foot_width;
+  const heelScale = Math.max(0.35, p.heel_size / 100);
+  const heelW = p.heel_width * heelScale;
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const malleolusScale = Math.max(0.35, p.malleolus_size / 100);
+  const posterior = normalize(sub(heel, instep), v(0, -1, 0));
+  const legAxis = normalize(sub(ankle, heel), v(0, 0, 1));
+  const heelBack = add(add(heel, mul(posterior, length * 0.045)), mul(legAxis, heelW * 0.13));
+  const tendonLow = add(add(heel, mul(posterior, length * 0.035)), mul(legAxis, heelW * 0.3));
+  const tendonMid = add(add(heel, mul(posterior, length * 0.03)), mul(legAxis, length * 0.34));
+  const tendonTop = add(add(ankle, mul(posterior, length * 0.028)), mul(legAxis, length * 0.075));
+  addBoxSegment(mesh, heelBack, tendonLow, heelW * 0.26 * Math.max(instepScale, malleolusScale * 0.92), "heel", "soft_tissue");
+  addBoxSegment(mesh, tendonLow, tendonMid, heelW * 0.2 * instepScale, "achilles_tendon", "soft_tissue");
+  addBoxSegment(mesh, tendonMid, tendonTop, heelW * 0.18 * instepScale, "achilles_tendon", "soft_tissue");
+  const ankleCore = mul(add(ankle, tendonMid), 0.5);
+  addBoxSegment(mesh, heelBack, ankleCore, heelW * 0.28 * Math.max(instepScale, malleolusScale * 0.95), "heel", "soft_tissue");
+  addBoxSegment(mesh, ankleCore, instep, width * 0.18 * instepScale, "instep", "soft_tissue");
+  const ankleSide = heelW * 0.36 * (0.92 + malleolusScale * 0.08);
+  for (const side of [-1, 1]) {
+    const malleolus = add(ankle, v(side * ankleSide, length * 0.03, -p.instep_height * 0.1));
+    const heelSide = add(heelBack, v(side * heelW * 0.3, 0, -heelW * 0.02));
+    const ankleSidePad = add(ankleCore, v(side * heelW * 0.24, 0, -heelW * 0.03));
+    const archSide = add(arch, v(side * width * 0.22, length * 0.05, -p.instep_height * 0.05));
+    addBoxSegment(mesh, heelSide, ankleSidePad, heelW * 0.22 * malleolusScale, "heel", "soft_tissue");
+    addBoxSegment(mesh, ankleSidePad, malleolus, heelW * 0.18 * malleolusScale, "ankle_joint", "soft_tissue");
+    addBoxSegment(mesh, ankleSidePad, archSide, width * 0.16 * instepScale, "foot_body", "soft_tissue");
+  }
+}
+
+function addMetatarsalWebs(mesh, skeleton, p) {
+  const toes = skeleton.toes;
+  if (toes.length < 2) return;
+  const pts = skeleton.points;
+  const instep = pts.instep;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const midBall = mul(add(bigBall, smallBall), 0.5);
+  const length = p.foot_length;
+  const width = p.foot_width;
+  const instepH = p.instep_height;
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const patchThickness = Math.max(7, Math.min(15, instepH * 0.2)) * instepScale;
+  const rearPoints = [];
+  const midPoints = [];
+  const frontPoints = [];
+  for (const toe of toes) {
+    rearPoints.push(add(add(instep, mul(sub(toe.base, instep), 0.22)), v(0, -length * 0.01, instepH * 0.12)));
+    midPoints.push(add(add(instep, mul(sub(toe.base, instep), 0.48)), v(0, -length * 0.01, instepH * 0.07)));
+    frontPoints.push(add(toe.base, v(0, -length * 0.045, instepH * 0.045)));
+  }
+  for (let i = 0; i < toes.length - 1; i++) {
+    addThickLoftPatch(mesh, rearPoints[i], midPoints[i], midPoints[i + 1], rearPoints[i + 1], 2, 2, patchThickness * 0.95, instepH * 0.055, "foot_body");
+    addThickLoftPatch(mesh, midPoints[i], frontPoints[i], frontPoints[i + 1], midPoints[i + 1], 3, 2, patchThickness * 1.15, instepH * 0.045, "foot_body");
+  }
+  addThickLoftPatch(
+    mesh,
+    add(instep, add(mul(sub(bigBall, instep), 0.3), v(-width * 0.08, 0, instepH * 0.06))),
+    add(bigBall, v(-width * 0.1, -length * 0.08, instepH * 0.02)),
+    add(midBall, v(0, -length * 0.06, instepH * 0.04)),
+    add(instep, v(0, length * 0.01, instepH * 0.08)),
+    3,
+    2,
+    patchThickness * 1.15,
+    instepH * 0.05,
+    "foot_body",
+  );
+  addThickLoftPatch(
+    mesh,
+    add(instep, v(0, length * 0.01, instepH * 0.08)),
+    add(midBall, v(0, -length * 0.06, instepH * 0.04)),
+    add(smallBall, v(width * 0.1, -length * 0.08, instepH * 0.02)),
+    add(instep, add(mul(sub(smallBall, instep), 0.3), v(width * 0.08, 0, instepH * 0.04))),
+    3,
+    2,
+    patchThickness * 1.15,
+    instepH * 0.05,
+    "foot_body",
+  );
 }
 
 function addToeBoxMesh(mesh, skeleton, p) {
@@ -743,6 +1031,70 @@ function addUvSphere(mesh, center, radius, resolution, group, material = "joint_
   for (let i = 0; i < stacks; i++) {
     for (let j = 0; j < slices; j++) {
       pushFace(mesh, [grid[i][j], grid[i][(j + 1) % slices], grid[i + 1][(j + 1) % slices], grid[i + 1][j]], group, material);
+    }
+  }
+}
+
+function addThickLoftPatch(mesh, p00, p10, p11, p01, uSteps, vSteps, thickness, crown, group) {
+  const normal0 = normalize(cross(sub(p10, p00), sub(p01, p00)), v(0, 0, 1));
+  const normal = normal0.z < 0 ? mul(normal0, -1) : normal0;
+  const top = [];
+  const bottom = [];
+  for (let u = 0; u <= uSteps; u++) {
+    const tu = u / uSteps;
+    const left = lerpVec(p00, p10, tu);
+    const right = lerpVec(p01, p11, tu);
+    const topRow = [];
+    const bottomRow = [];
+    for (let vv = 0; vv <= vSteps; vv++) {
+      const tv = vv / vSteps;
+      const base = lerpVec(left, right, tv);
+      const arch = Math.sin(Math.PI * tu) * Math.sin(Math.PI * tv) * crown;
+      const center = add(base, mul(normal, arch));
+      topRow.push(addVertex(mesh, add(center, mul(normal, thickness * 0.5))));
+      bottomRow.push(addVertex(mesh, sub(center, mul(normal, thickness * 0.5))));
+    }
+    top.push(topRow);
+    bottom.push(bottomRow);
+  }
+  appendGridShell(mesh, top, bottom, group, "soft_tissue");
+}
+
+function addSubdividedBox(mesh, center, size, divisions, group, material = "soft_tissue") {
+  const sx = size.x * 1.12;
+  const sy = size.y * 1.12;
+  const sz = size.z * 1.18;
+  const nx = Math.max(1, divisions[0]);
+  const ny = Math.max(1, divisions[1]);
+  const nz = Math.max(1, divisions[2]);
+  const x0 = center.x - sx * 0.5;
+  const y0 = center.y - sy * 0.5;
+  const z0 = center.z - sz * 0.5;
+  const x1 = center.x + sx * 0.5;
+  const y1 = center.y + sy * 0.5;
+  const z1 = center.z + sz * 0.5;
+
+  addBoxFaceGrid(mesh, v(x0, y0, z1), v(sx, 0, 0), v(0, sy, 0), nx, ny, group, material, false);
+  addBoxFaceGrid(mesh, v(x0, y0, z0), v(0, sy, 0), v(sx, 0, 0), ny, nx, group, material, false);
+  addBoxFaceGrid(mesh, v(x0, y0, z0), v(sx, 0, 0), v(0, 0, sz), nx, nz, group, material, false);
+  addBoxFaceGrid(mesh, v(x0, y1, z0), v(0, 0, sz), v(sx, 0, 0), nz, nx, group, material, false);
+  addBoxFaceGrid(mesh, v(x0, y0, z0), v(0, 0, sz), v(0, sy, 0), nz, ny, group, material, false);
+  addBoxFaceGrid(mesh, v(x1, y0, z0), v(0, sy, 0), v(0, 0, sz), ny, nz, group, material, false);
+}
+
+function addBoxFaceGrid(mesh, origin, uVec, vVec, uCount, vCount, group, material, flip) {
+  const grid = [];
+  for (let u = 0; u <= uCount; u++) {
+    const row = [];
+    for (let vv = 0; vv <= vCount; vv++) {
+      row.push(addVertex(mesh, add(add(origin, mul(uVec, u / uCount)), mul(vVec, vv / vCount))));
+    }
+    grid.push(row);
+  }
+  for (let u = 0; u < uCount; u++) {
+    for (let vv = 0; vv < vCount; vv++) {
+      const face = [grid[u][vv], grid[u + 1][vv], grid[u + 1][vv + 1], grid[u][vv + 1]];
+      pushFace(mesh, flip ? face.reverse() : face, group, material);
     }
   }
 }
@@ -998,9 +1350,9 @@ function norm(a) {
   return Math.hypot(a.x, a.y, a.z);
 }
 
-function normalize(a) {
+function normalize(a, fallback = v(0, 0, 1)) {
   const length = norm(a);
-  return length < 0.001 ? v(0, 0, 1) : mul(a, 1 / length);
+  return length < 0.001 ? fallback : mul(a, 1 / length);
 }
 
 function deg(value) {
@@ -1009,6 +1361,10 @@ function deg(value) {
 
 function lerp(a, b, t) {
   return a * (1 - t) + b * t;
+}
+
+function lerpVec(a, b, t) {
+  return v(lerp(a.x, b.x, t), lerp(a.y, b.y, t), lerp(a.z, b.z, t));
 }
 
 function clamp(value, min, max) {
