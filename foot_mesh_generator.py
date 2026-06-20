@@ -62,6 +62,11 @@ def _add_foot_structure_blocks(vertices, faces, groups, skeleton: dict, params: 
     heel_scale = _heel_scale(params)
 
     _add_foot_skin_shell(vertices, faces, groups, skeleton, params)
+
+    if skeleton.get("toe_box"):
+        _add_shoe_forefoot_fill(vertices, faces, groups, skeleton, params)
+        return
+
     _add_flesh_masses(vertices, faces, groups, skeleton, params)
     _add_side_volume_masses(vertices, faces, groups, skeleton, params)
     _add_midfoot_fill_masses(vertices, faces, groups, skeleton, params)
@@ -103,10 +108,7 @@ def _add_foot_structure_blocks(vertices, faces, groups, skeleton: dict, params: 
         tendon_end = base + np.array([0.0, -params.foot_length * 0.03, params.instep_height * 0.06])
         _add_box_segment(vertices, faces, groups, tendon_start, tendon_end, max(7.5, thickness * 0.68), "instep")
 
-    if skeleton.get("toe_box"):
-        _add_shoe_forefoot_fill(vertices, faces, groups, skeleton, params)
-    else:
-        _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton, params)
+    _add_metatarsal_web_surfaces(vertices, faces, groups, skeleton, params)
 
 
 def _add_foot_skin_shell(vertices, faces, groups, skeleton: dict, params: FootParams) -> None:

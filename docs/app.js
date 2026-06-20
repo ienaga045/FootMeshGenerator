@@ -581,6 +581,11 @@ function addFootBody(mesh, skeleton, p) {
   const jointScale = p.joint_sphere_scale / 100;
 
   addBodyShell(mesh, skeleton, p);
+  if (skeleton.toe_box) {
+    addShoeForefootFill(mesh, skeleton, p);
+    return;
+  }
+
   addFleshMasses(mesh, skeleton, p);
   addSideVolumeMasses(mesh, skeleton, p);
   addMidfootFillMasses(mesh, skeleton, p);
@@ -621,6 +626,55 @@ function addFootBody(mesh, skeleton, p) {
     });
     addMetatarsalWebs(mesh, skeleton, p);
   }
+}
+
+function addShoeForefootFill(mesh, skeleton, p) {
+  const toeBox = skeleton.toe_box;
+  if (!toeBox) return;
+
+  const pts = skeleton.points;
+  const instep = pts.instep;
+  const bigBall = pts.big_ball;
+  const smallBall = pts.small_ball;
+  const midBall = mul(add(bigBall, smallBall), 0.5);
+  const outline = toeBox.top_outline;
+  const back = toeBox.back_center;
+  const leftBack = v(outline[0].x, outline[0].y, back.z * 0.9);
+  const rightBack = v(outline[outline.length - 1].x, outline[outline.length - 1].y, back.z * 0.9);
+  const length = p.foot_length;
+  const width = p.foot_width;
+  const instepH = p.instep_height;
+  const instepScale = Math.max(0.35, p.instep_part_thickness / 100);
+  const vampScale = Math.max(0.7, p.vamp_volume / 100);
+  const patchThickness = Math.max(9, instepH * 0.22) * instepScale * vampScale;
+  const dorsal = add(midBall, v(0, -length * 0.03, instepH * 0.1));
+  const rear = add(add(instep, mul(sub(dorsal, instep), 0.7)), v(0, -length * 0.02, instepH * 0.06));
+  const backCrown = add(back, v(0, 0, instepH * 0.02));
+
+  addThickLoftPatch(
+    mesh,
+    add(bigBall, v(-width * 0.05, -length * 0.03, 0)),
+    leftBack,
+    backCrown,
+    rear,
+    2,
+    2,
+    patchThickness,
+    instepH * 0.05,
+    "toe_box",
+  );
+  addThickLoftPatch(
+    mesh,
+    rear,
+    backCrown,
+    rightBack,
+    add(smallBall, v(width * 0.05, -length * 0.03, 0)),
+    2,
+    2,
+    patchThickness,
+    instepH * 0.05,
+    "toe_box",
+  );
 }
 
 function addBodyShell(mesh, skeleton, p) {
