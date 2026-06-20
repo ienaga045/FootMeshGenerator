@@ -31,7 +31,6 @@ def generate_foot_mesh_from_skeleton(skeleton: dict, params: FootParams) -> tupl
     _add_foot_structure_blocks(vertices, faces, groups, skeleton, params)
 
     if params.foot_mode == "shoe":
-        _add_shoe_sole_wedge(vertices, faces, groups, skeleton, params)
         _add_toe_box_mesh(vertices, faces, groups, skeleton, params)
         return vertices, faces, groups
 
