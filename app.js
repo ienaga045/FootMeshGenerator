@@ -555,7 +555,6 @@ function generateFootMeshFromSkeleton(skeleton, p) {
   const mesh = { vertices: [], faces: [], groups: [] };
   addFootBody(mesh, skeleton, p);
   if (p.foot_mode === "shoe") {
-    addShoeSole(mesh, skeleton, p);
     addToeBoxMesh(mesh, skeleton, p);
   } else {
     for (const toe of skeleton.toes) {
