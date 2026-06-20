@@ -33,6 +33,22 @@ PY
 
 依存関係の不足で `.app` 起動に失敗する場合は、先に `FootBaseMeshGenerator.command` を一度実行してください。
 
+## GitHub Pages Web版
+
+`docs/` フォルダに、GitHub Pages公開用のJavaScript版もあります。Pythonサーバ、PySimpleGUI、OpenCVを使わず、ブラウザ内のCanvasでプレビューし、OBJをブラウザ内で生成してダウンロードします。
+
+ローカル確認:
+
+```bash
+python3 -m http.server 8080 -d docs
+```
+
+```text
+http://127.0.0.1:8080
+```
+
+GitHub Pagesで公開する場合は、リポジトリ設定の Pages で `main` ブランチの `/docs` フォルダを公開元にします。
+
 ## 操作
 
 - スライダーを動かすと、OpenCVで描画した足の簡易スケルトンがリアルタイムに変化します。

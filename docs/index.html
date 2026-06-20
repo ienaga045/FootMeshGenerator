@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Foot Base Mesh Generator Web</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="preview-pane" aria-label="プレビュー">
+        <canvas id="preview" width="920" height="620"></canvas>
+        <div class="bottom-bar">
+          <fieldset class="preset-frame">
+            <legend>プリセット</legend>
+            <div id="presetButtons" class="button-grid"></div>
+          </fieldset>
+          <div class="actions">
+            <button id="downloadObj" class="primary-button" type="button">OBJ作成・保存</button>
+            <button id="resetParams" type="button">リセット</button>
+          </div>
+          <p id="status" class="status">Ready</p>
+        </div>
+      </section>
+
+      <aside class="controls-pane" aria-label="パラメータ">
+        <section class="control-block">
+          <h1>Foot Base Mesh Generator</h1>
+          <div class="segmented" role="group" aria-label="生成モード">
+            <label><input type="radio" name="footMode" value="barefoot" checked> Barefoot mode</label>
+            <label><input type="radio" name="footMode" value="shoe"> Shoe base mode</label>
+          </div>
+          <div class="segmented compact" role="group" aria-label="足タイプ">
+            <label><input type="radio" name="side" value="right" checked> 右足</label>
+            <label><input type="radio" name="side" value="left"> 左足</label>
+          </div>
+          <label class="select-row">
+            <span>プレビュー</span>
+            <select id="previewMode">
+              <option value="both">両方表示</option>
+              <option value="top">上面プレビュー</option>
+              <option value="side">側面プレビュー</option>
+            </select>
+          </label>
+        </section>
+        <div id="sliderGroups"></div>
+      </aside>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
