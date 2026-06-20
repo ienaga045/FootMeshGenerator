@@ -252,7 +252,7 @@ input[type="range"] {
   }
 
   #preview {
-    height: auto;
+    height: clamp(220px, 52vw, 285px);
     min-height: 0;
     max-height: none;
   }
@@ -276,7 +276,9 @@ input[type="range"] {
   }
 
   .button-grid button {
-    min-width: 76px;
+    flex: 1 1 calc(33.333% - 6px);
+    min-width: 0;
+    font-size: 13px;
   }
 
   .primary-button {
