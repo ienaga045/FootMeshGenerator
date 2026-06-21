@@ -853,9 +853,15 @@ function addMidfootFillMasses(mesh, skeleton, p) {
   const rearDorsal = add(heel, v(0, length * 0.1, heelW * 0.22));
   const midDorsal = add(instep, v(0, length * 0.05, instepH * 0.1));
   const foreDorsal = add(midBall, v(0, -length * 0.06, instepH * 0.08));
-  const deepCoreA = add(heel, v(0, length * 0.08, heelW * 0.12));
-  const deepCoreB = add(midBall, v(0, -length * 0.05, instepH * 0.02));
-  addBoxSegment(mesh, deepCoreA, deepCoreB, width * 0.3 * instepScale, "foot_body", "soft_tissue");
+  const supportRatio = p.plantar_support_length <= 0 ? 0 : clamp(p.plantar_support_length / 55, 0.04, 1.2);
+  if (supportRatio > 0) {
+    const deepCoreRear = add(heel, v(0, length * 0.08, heelW * 0.12));
+    const deepCoreFront = add(midBall, v(0, -length * 0.05, instepH * 0.02));
+    const deepCoreCenter = add(pts.arch, v(0, length * 0.04, instepH * 0.02));
+    const deepCoreA = add(deepCoreCenter, mul(sub(deepCoreRear, deepCoreCenter), supportRatio));
+    const deepCoreB = add(deepCoreCenter, mul(sub(deepCoreFront, deepCoreCenter), supportRatio));
+    addBoxSegment(mesh, deepCoreA, deepCoreB, width * 0.3 * instepScale, "foot_body", "soft_tissue");
+  }
   addBoxSegment(mesh, rearDorsal, midDorsal, width * 0.24 * instepScale, "instep", "soft_tissue");
   addBoxSegment(mesh, midDorsal, foreDorsal, width * 0.22 * instepScale, "instep", "soft_tissue");
 
